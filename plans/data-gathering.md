@@ -2,11 +2,11 @@
 
 ## Base Crash Data
 
-- [ ] PennDOT Crash Data (2019–2024) — [OpenDataPhilly Crashes](https://opendataphilly.org/datasets/crashes/) — CSV, SHP, or GeoJSON
+- [x] PennDOT Crash Data (2019–2024) — [OpenDataPhilly Crashes](https://opendataphilly.org/datasets/crashes/) — CSV, SHP, or GeoJSON
   - [x] Obtain
   - [x] Confirm `dec_latitude` / `dec_longitude` fields are populated and geocoding quality is decent
-  - [ ] Check `max_severity_level` values and distribution
-  - [ ] Verify `weather1`, `weather2`, `illumination`, `hour_of_day` fields are usable
+  - [x] Check `max_severity_level` values and distribution - TBD if usable. Probably as categorical.
+  - [x] Verify `weather1`, `weather2`, `illumination`, `hour_of_day` fields are usable
   - [x] 2024
 
 ## Physical Factor Data
@@ -44,6 +44,7 @@
 
 ### BONUS
 - [ ] Sunlight? Direction? 
+- [ ] Cloud cover - might be too difficutl but weould becrayz
 - [ ] Anything else?
 
 ## Control / Confounder Data
