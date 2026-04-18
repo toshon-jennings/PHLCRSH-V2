@@ -7,8 +7,7 @@
   - [x] Confirm `dec_latitude` / `dec_longitude` fields are populated and geocoding quality is decent
   - [ ] Check `max_severity_level` values and distribution
   - [ ] Verify `weather1`, `weather2`, `illumination`, `hour_of_day` fields are usable
-  - [ ] Check if 2025 data drops in time
-  - [ ] Pick a year!
+  - [x] 2024
 
 ## Physical Factor Data
 
@@ -35,27 +34,35 @@
 ## Natural Factor Data
 
 - [ ] Tree Canopy Raster — NLCD 30m or Philly-specific canopy assessment
-  - [ ] Obtain
-  - [ ] Check [OpenDataPhilly](https://opendataphilly.org) for a local canopy layer
-  - [ ] Fallback: [NLCD Tree Canopy](https://www.mrlc.gov/data/nlcd-tree-canopy-cover-conus) 
-  - [ ] Confirm CRS and resolution
+  - [x] Obtain (PPR_LandCover_2018 - not sure where i got it check work computer)
+  - [x] Confirm CRS and resolution
 - [ ] DEM / Elevation — USGS lidar-derived
-  - [ ] Check [OpenDataPhilly](https://opendataphilly.org) for city DEM
-  - [ ] Fallback: [USGS 3DEP](https://apps.nationalmap.gov/downloader/) — 1m or 3m resolution
+  - [x] obtain https://noaa-nos-coastal-lidar-pds.s3.amazonaws.com/dem/PA_Phil_DEM_2022_9849/index.html
   - [ ] Plan slope computation per road segment 
 - [ ] Parks Trees Planted.
-  - [ ] Obtain
+  - [x] Obtain
+
+### BONUS
+- [ ] Sunlight? Direction? 
+- [ ] Anything else?
 
 ## Control / Confounder Data
 
-- [ ] Census Demographics (ACS) — [Census TIGER/data.census.gov](https://data.census.gov) — tract-level - wait.. not block level?
-  - [ ] Income, population density, commute mode — pick a few relevant variables
-- [ ] Zoning / Land Use — [OpenDataPhilly](https://opendataphilly.org) — residential vs commercial vs industrial
+- [ ] Census Demographics (ACS) — [Census TIGER/data.census.gov](https://data.census.gov) — block-group level
+  - [x] - Border/blog groups
+  - [x] Income, population density, commute mode — pick a few relevant variables
+- [x] Zoning / Land Use — [OpenDataPhilly](https://opendataphilly.org) — residential vs commercial vs industrial
   - [ ] Join to road segments by spatial overlay
 
 ## Processing Prep
 
 - [ ] Confirm common CRS: PA State Plane South (EPSG:2272)
-- [ ] Resave
+  - [ ] Reproject all to 2272
+  - [ ] Resave
 - [ ] Set up project directory structure
+- [ ] Plot everything in a map.
 - [ ] Initial exploratory notebook — load crash data and centerlines, try the spatial join
+
+## Next Steps
+
+- [ ] Setup web app. Python -> TS Vite 
