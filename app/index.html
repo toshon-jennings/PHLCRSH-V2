@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PHLCRSH — Philadelphia Crash Risk</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; font-family: sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      #status {
+        padding: 6px 12px;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      #map { flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="status">Loading…</div>
+      <div id="map"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+geopandas>=0.14
+pyarrow>=14.0
+duckdb>=0.10
+shapely>=2.0
