@@ -8,28 +8,46 @@
   - [x] Check `max_severity_level` values and distribution - TBD if usable. Probably as categorical.
   - [x] Verify `weather1`, `weather2`, `illumination`, `hour_of_day` fields are usable
   - [x] 2024
+  - [x] to 2272
 
 ## Physical Factor Data
 
-- [ ] Street Centerlines — [OpenDataPhilly](https://opendataphilly.org/datasets/street-centerlines/) — lane count, directionality, classification
+- [x] Street Centerlines — [OpenDataPhilly](https://opendataphilly.org/datasets/street-centerlines/) — lane count, directionality, classification
   - [x] Obtain
-  - [ ] Check what attributes are actually on each segment (speed limit? lane count?)
-  - [ ] Compute segment lengths
-- [ ] Curbs / Cartway Edges — [OpenDataPhilly](https://opendataphilly.org/datasets/curbs/) — for deriving road width
+  - [x] Check what attributes are actually on each segment
+  - [x] No speed limit, no lane count.
+  - [x] to 2272
+    - [x] Compute segment lengths (already done)
+- [-] Curbs / Cartway Edges — [OpenDataPhilly](https://opendataphilly.org/datasets/curbs/) — for deriving road width
   - [x] Obtain
-  - [ ] Figure out how to pair opposing curb edges to a centerline segment
-- [ ] Traffic Calming Devices — [OpenDataPhilly](https://opendataphilly.org/categories/transportation/) — point locations
+  - [x] Which fcodes to use? We have the main streets, but we can use islands and such to determine if a roadway is divided. Do we have that? i don't think so.
+  - [-] Lanes with separation (some)
+  - [-] Figure out how to pair/join opposing curb edges to a centerline segment (some - in progress)
+- [x] Traffic Calming Devices — [OpenDataPhilly](https://opendataphilly.org/categories/transportation/) — point locations
   - [x] Obtain
-  - [ ] Check what types are represented (speed bumps, bump-outs, etc.) - by id get that figured out.,
-- [ ] Intersection Controls — OpenDataPhilly — signalized vs stop-controlled
+  - [!] Check what types are represented (speed bumps, bump-outs, etc.) - by id get that figured out...
+    - We cannot determine. We can gather the types, but not filter by type unfortunately.
+  - [x] ensure that the measure is completed as of 2024 Dec 31.
+  - [x] join (non spatial have seg_id)
+- [x] Intersection Controls — OpenDataPhilly — signalized vs stop-controlled
   - [x] Obtain
-  - [ ] May overlap with crash data fields — check for redundancy
-  - [ ] What is led_status?
-- [ ] AADT Traffic Counts — [DVRPC Traffic Count Viewer](https://www.dvrpc.org/traffic/) — traffic volume
+  - [x] May overlap with crash data fields — check for redundancy - some but we have em anyway
+  - [x] What is led_status? - seemingly it's if there are leds installed.
+  - [x] joined 
+- [x] AADT Traffic Counts — [DVRPC Traffic Count Viewer](https://www.dvrpc.org/traffic/) — traffic volume
   - [x] Obtain
-  - [ ] Download station locations and counts
-  - [ ] Assess spatial coverage — how many Philly segments have a nearby station?
-  - [ ] Decide on join strategy (nearest station? interpolation? cutoff distance?)
+  - [x] Assess spatial coverage — how many Philly segments have a nearby station?
+    - it's sparse, but we'll keep and perhaps we cna use it.
+    - can use the type of street from centerline data as a proxy, or do a distance analysis
+  - [x] Decide on join strategy (nearest station? interpolation? cutoff distance?)
+    - cutoff 500 ft
+- [ ] Find lane count and speed limit data
+  - [-] lane count
+  - [-] speed limit
+    - [x] filled in by road class on centerline data
+    - [x] can try to link up with state mph data
+      - this isn't much, but at least it's some ground truth
+  - [ ] bring it all togheter / fill in defaults
 
 ## Natural Factor Data
 
@@ -45,7 +63,8 @@
 ### BONUS
 - [ ] Sunlight? Direction? 
 - [ ] Cloud cover - might be too difficutl but weould becrayz
-- [ ] Anything else?
+- [ ] add cross_median in crash data to severity?
+- [ ] sanity check road width with OSM or other data source
 
 ## Control / Confounder Data
 

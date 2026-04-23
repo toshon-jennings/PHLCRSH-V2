@@ -1,42 +1,34 @@
 # Schedule
 
-Sat Apr 18
+- [x] obtain data - done
 
-- obtain data
-- prep (CRS, spatial joins)
-- basic maps
+W April 22
+- [-] go through understand data
+- [-] prep (CRS, spatial joins)
+- [-] basic maps
+
+T
 - some raster data work
-
-Sun Apr 19 - need to work on stat not too much time here
-
+- double back and finish above 
+    - basic maps need to be non explore and exportable
+- check aggregation on joins
 - little raster data
 
-Monday - EB
 
-- NOTHING
+F
 
-Tuesday + Wednesday
+- Need to start making a call on what you can show for the presentation
 
 - Build analytical table
 - more raster join with normalization
-- roadwidth
+- roadwidth 
 
-Thurs + Friday Stat
 
-- Nothing
-
-Saturday Apr 25
-
+S
 - Analysis and Mapping
 
-Sunday Apr 26
-
+SN
 - Polish and finish for presentation
-
-Monday Apr 27
-
 - Present in class
-
-Last weekdn
-
 - Final polish
+
