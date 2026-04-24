@@ -347,24 +347,25 @@ rmsseg.plot(column="is_divided", categorical=True, legend=True, cmap="flag", fig
 
 # %%
 
-def mrr_width(poly):
-    mrr = poly.minimum_rotated_rectangle
-    xs, ys = mrr.exterior.coords.xy
-    edges = [((xs[i+1]-xs[i])**2 + (ys[i+1]-ys[i])**2)**0.5 for i in range(4)]
-    return min(edges[0], edges[1])
-roadways["width_ft"] = roadways.geometry.apply(mrr_width)
-print(roadways["width_ft"].describe())
+# FYI THIS WAS FIRST APPROACH TO JOIN BACK TO CENTERLINES - DIDNT GO WITH
+# def mrr_width(poly):
+#     mrr = poly.minimum_rotated_rectangle
+#     xs, ys = mrr.exterior.coords.xy
+#     edges = [((xs[i+1]-xs[i])**2 + (ys[i+1]-ys[i])**2)**0.5 for i in range(4)]
+#     return min(edges[0], edges[1])
+# roadways["width_ft"] = roadways.geometry.apply(mrr_width)
+# print(roadways["width_ft"].describe())
 
-print(roadways.geometry.type.value_counts())
-print(roadways[roadways.geometry.type == "MultiPolygon"].shape)
+# print(roadways.geometry.type.value_counts())
+# print(roadways[roadways.geometry.type == "MultiPolygon"].shape)
 
-top = roadways.sort_values("width_ft", ascending=False).head(10)
-print(top[["fcode", "width_ft"]])
-top.plot(figsize=(10,10), color="red")
-plt.show()
+# top = roadways.sort_values("width_ft", ascending=False).head(10)
+# print(top[["fcode", "width_ft"]])
+# top.plot(figsize=(10,10), color="red")
+# plt.show()
 
-roadways["width_ft"] = 2 * roadways.geometry.area / roadways.geometry.length
-print(roadways["width_ft"].describe())
+# roadways["width_ft"] = 2 * roadways.geometry.area / roadways.geometry.length
+# print(roadways["width_ft"].describe())
 
 # the below map actually makes some sense relatively - blvd is the darkest road, makes sense... We can see henry a bit
 # What I think is probably important rather than just isDivided is number of lanes per divider.
@@ -373,7 +374,7 @@ print(roadways["width_ft"].describe())
 # the min, however, makes no sense, unless we have some weird roads. 0.5 feet... nah
 # mean of 14... one road two ways... that makes sense to me.
 
-# %%
+## %%
 # roadways["width_ft"].describe()
 
 # # or
@@ -446,7 +447,7 @@ print(roadways["width_ft"].describe())
 # roadways_matched["dist_ft"].describe() # worse than the width feet.
 # I'll come back to this, but when we do, we should be able to try to match the state roads with our calculations.
 # and this is clearly wrong, the above is better.
-## - try again
+## - try again -> THIS WORKS!
 
 from shapely.ops import unary_union
 from shapely import make_valid
@@ -796,23 +797,24 @@ def widths_by_centerline(
     return out, raw, transects
 
 #%%
-%%time
-
+# 
+## NOTE _ KEEP THESE, JUST COMMENTED OUT FOR SPACE SAVE - THIS IS TESTING AND VALIDATION
 ### - RUNNING
 centerlines = center_line_subset.copy()
 roadway_polys = roadways.copy()
 
-# this is taking FOREVER :) MUCH MUCH Quicker with 2k and spacing ft at 75.
-test_centerlines = centerlines.sample(2000, random_state=1)
-test_out, test_raw, test_transects = widths_by_centerline(
-    centerlines=test_centerlines,
-    surfaces=roadway_polys,
-    prefix="cartway",
-    id_col="cl_id",
-    spacing_ft=75,
-    trim_ft=25,
-    half_len_ft=175,
-)
+# this is taking FOREVER :) 
+# MUCH MUCH Quicker with 2k and spacing ft at 75.
+# test_centerlines = centerlines.sample(2000, random_state=1)
+# test_out, test_raw, test_transects = widths_by_centerline(
+#     centerlines=test_centerlines,
+#     surfaces=roadway_polys,
+#     prefix="cartway",
+#     id_col="cl_id",
+#     spacing_ft=75,
+#     trim_ft=25,
+#     half_len_ft=175,
+# )
 
 # centerlines_w_cartway, cartway_raw, cartway_transects = widths_by_centerline(
 #     centerlines=centerlines,
@@ -829,73 +831,72 @@ test_out, test_raw, test_transects = widths_by_centerline(
 
 #%%
 # we'll need to QA the results before we move on and run the entire shit.
-test_raw[["paved_width_ft", "span_width_ft", "n_parts", "center_covered"]].describe()
+# test_raw[["paved_width_ft", "span_width_ft", "n_parts", "center_covered"]].describe()
 
-test_out[
-    ["cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
-].describe()
+# test_out[
+#     ["cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+# ].describe()
 
-test_out.sort_values("cartway_span_median_ft", ascending=False)[
-    ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
-].head(20)
+# test_out.sort_values("cartway_span_median_ft", ascending=False)[
+#     ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+# ].head(20)
 
-test_out.sort_values("cartway_span_median_ft", ascending=True)[
-    ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
-].head(20)
+# test_out.sort_values("cartway_span_median_ft", ascending=True)[
+#     ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+# ].head(20)
 
 
-ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.25)
-test_out.plot(
-    ax=ax,
-    column="cartway_span_median_ft",
-    legend=True,
-    linewidth=1,
-) # looks pretty sane to me at first glance?
+# ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.25)
+# test_out.plot(
+#     ax=ax,
+#     column="cartway_span_median_ft",
+#     legend=True,
+#     linewidth=1,
+# ) # looks pretty sane to me at first glance?
 
-wide_raw = test_raw[test_raw["span_width_ft"] > 120]
+# wide_raw = test_raw[test_raw["span_width_ft"] > 120]
 
-ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
-wide_raw.plot(ax=ax, color="red", linewidth=1) # hmmmm less enthusiasm.. lots of 120 wide streets.
-test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
+# ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+# wide_raw.plot(ax=ax, color="red", linewidth=1) # hmmmm less enthusiasm.. lots of 120 wide streets.
+# test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
 
-wide_raw = test_raw[test_raw["span_width_ft"] > 120].copy()
-wide_raw[["span_width_ft", "paved_width_ft", "n_parts", "center_covered"]].describe()
+# wide_raw = test_raw[test_raw["span_width_ft"] > 120].copy()
+# wide_raw[["span_width_ft", "paved_width_ft", "n_parts", "center_covered"]].describe()
 
-# compare span vs paved
-wide_raw["gap_ft"] = wide_raw["span_width_ft"] - wide_raw["paved_width_ft"]
+# # compare span vs paved
+# wide_raw["gap_ft"] = wide_raw["span_width_ft"] - wide_raw["paved_width_ft"]
 
-wide_raw[["span_width_ft", "paved_width_ft", "gap_ft", "n_parts"]].describe()
+# wide_raw[["span_width_ft", "paved_width_ft", "gap_ft", "n_parts"]].describe()
 
-top_wide = test_raw.sort_values("span_width_ft", ascending=False).head(20)
+# top_wide = test_raw.sort_values("span_width_ft", ascending=False).head(20)
 
-ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
-top_wide.plot(ax=ax, color="red", linewidth=2)
-test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
-# So this looks a bit more promising... it seems like we're hitting mostly intersections or other weird outliers
-# Let's see if we can do better:
+# ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+# top_wide.plot(ax=ax, color="red", linewidth=2)
+# test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
+# # So this looks a bit more promising... it seems like we're hitting mostly intersections or other weird outliers
+# # Let's see if we can do better:
+# #%%
+
+# test_out2, test_raw2, test_transects2 = widths_by_centerline(
+#     centerlines=test_centerlines,
+#     surfaces=roadway_polys,
+#     prefix="cartway",
+#     id_col="cl_id",
+#     spacing_ft=75,
+#     trim_ft=50,
+#     half_len_ft=125,
+# )
+
 #%%
+# wide_raw_2 = test_raw2[test_raw2["span_width_ft"] > 120]
 
-test_out2, test_raw2, test_transects2 = widths_by_centerline(
-    centerlines=test_centerlines,
-    surfaces=roadway_polys,
-    prefix="cartway",
-    id_col="cl_id",
-    spacing_ft=75,
-    trim_ft=50,
-    half_len_ft=125,
-)
+# ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+# wide_raw_2.plot(ax=ax, color="red", linewidth=1) # This is much much better. At this point I need to really dig into what I'm dealing with
 
-#%%
-wide_raw_2 = test_raw2[test_raw2["span_width_ft"] > 120]
-
-ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
-wide_raw_2.plot(ax=ax, color="red", linewidth=1) # This is much much better. At this point I need to really dig into what I'm dealing with
-
-test_raw2_c = test_raw2.copy()
-test_raw2_c["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
+# test_raw2_c = test_raw2.copy()
+# test_raw2_c["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
 
 import folium
-import geopandas as gpd
 
 def map_width_check(centerlines, roadways, transects, width_threshold=120):
     roadways_4326 = roadways.to_crs(4326)
@@ -950,37 +951,37 @@ def map_width_check(centerlines, roadways, transects, width_threshold=120):
     return m
 
 
-m2 = map_width_check(
-    centerlines=test_centerlines,
-    roadways=roadway_polys,
-    transects=test_raw2_c,
-    width_threshold=120,
-)
+# m2 = map_width_check(
+#     centerlines=test_centerlines,
+#     roadways=roadway_polys,
+#     transects=test_raw2_c,
+#     width_threshold=120,
+# )
 
-m2
+# m2
 
 # AHAH we can see from the "Bad" examples that we're 
 #%%
-wide_paved_2 = test_raw2[test_raw2["paved_width_ft"] > 120]
+# wide_paved_2 = test_raw2[test_raw2["paved_width_ft"] > 120]
 
-ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
-wide_paved_2.plot(ax=ax, color="red", linewidth=1)
-wide_paved_2["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
+# ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+# wide_paved_2.plot(ax=ax, color="red", linewidth=1)
+# wide_paved_2["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
 
-m3 = map_width_check(
-    centerlines=test_centerlines,
-    roadways=roadway_polys,
-    transects=wide_paved_2,
-    width_threshold=120,
-)
+# m3 = map_width_check(
+#     centerlines=test_centerlines,
+#     roadways=roadway_polys,
+#     transects=wide_paved_2,
+#     width_threshold=120,
+# )
 
-test_out2.plot(
-    column="cartway_paved_median_ft",
-    legend=True,
-    figsize=(12, 12),
-    vmin=0,
-    vmax=100,
-)
+# test_out2.plot(
+#     column="cartway_paved_median_ft",
+#     legend=True,
+#     figsize=(12, 12),
+#     vmin=0,
+#     vmax=100,
+# )
 
 # This distribution looks pretty sane to me.
 # The max yeah some cause for concern, btu we're cleaning up well.
@@ -994,194 +995,194 @@ test_out2.plot(
 # max       250.000000
 # Name: cartway_paved_median_ft, dtype: float64
 #%%
-test_out2.sort_values("cartway_paved_median_ft", ascending=False)[
-    [
-        "cl_id",
-        "cartway_paved_median_ft",
-        "cartway_span_median_ft",
-        "cartway_valid_share",
-        "cartway_n_valid",
-        "cartway_parts_median",
-    ]
-].head(20)
+# test_out2.sort_values("cartway_paved_median_ft", ascending=False)[
+#     [
+#         "cl_id",
+#         "cartway_paved_median_ft",
+#         "cartway_span_median_ft",
+#         "cartway_valid_share",
+#         "cartway_n_valid",
+#         "cartway_parts_median",
+#     ]
+# ].head(20)
 
-## ah we need labels to determine what is what
+# ## ah we need labels to determine what is what
 
-top_ids = (
-    test_out2
-    .sort_values("cartway_paved_median_ft", ascending=False)
-    .head(20)["cl_id"]
-    .tolist()
-)
+# top_ids = (
+#     test_out2
+#     .sort_values("cartway_paved_median_ft", ascending=False)
+#     .head(20)["cl_id"]
+#     .tolist()
+# )
 
-top_segments = test_out2[test_out2["cl_id"].isin(top_ids)].copy()
+# top_segments = test_out2[test_out2["cl_id"].isin(top_ids)].copy()
 
-ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.2)
-test_out2.plot(ax=ax, color="lightgray", linewidth=0.5)
-top_segments.plot(ax=ax, color="red", linewidth=3)
+# ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.2)
+# test_out2.plot(ax=ax, color="lightgray", linewidth=0.5)
+# top_segments.plot(ax=ax, color="red", linewidth=3)
 
-# label each red segment with cl_id
-for _, r in top_segments.iterrows():
-    p = r.geometry.representative_point()
-    ax.annotate(
-        str(r["cl_id"]),
-        xy=(p.x, p.y),
-        fontsize=9,
-        color="black",
-        bbox=dict(facecolor="white", alpha=0.7, edgecolor="none")
-    )
+# # label each red segment with cl_id
+# for _, r in top_segments.iterrows():
+#     p = r.geometry.representative_point()
+#     ax.annotate(
+#         str(r["cl_id"]),
+#         xy=(p.x, p.y),
+#         fontsize=9,
+#         color="black",
+#         bbox=dict(facecolor="white", alpha=0.7, edgecolor="none")
+#     )
     
-top_segments_4326 = top_segments.to_crs(4326)
+# top_segments_4326 = top_segments.to_crs(4326)
 
-m3 = folium.Map(
-    location=[
-        top_segments_4326.geometry.unary_union.centroid.y,
-        top_segments_4326.geometry.unary_union.centroid.x
-    ],
-    zoom_start=12,
-    tiles="CartoDB positron"
-)
+# m3 = folium.Map(
+#     location=[
+#         top_segments_4326.geometry.unary_union.centroid.y,
+#         top_segments_4326.geometry.unary_union.centroid.x
+#     ],
+#     zoom_start=12,
+#     tiles="CartoDB positron"
+# )
 
-folium.GeoJson(
-    top_segments_4326[
-        ["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median", "geometry"]
-    ],
-    tooltip=folium.GeoJsonTooltip(
-        fields=["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median"],
-        aliases=["CL ID", "Paved median", "Span median", "N valid", "Parts median"],
-    ),
-    style_function=lambda x: {"color": "red", "weight": 5},
-).add_to(m3)
+# folium.GeoJson(
+#     top_segments_4326[
+#         ["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median", "geometry"]
+#     ],
+#     tooltip=folium.GeoJsonTooltip(
+#         fields=["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median"],
+#         aliases=["CL ID", "Paved median", "Span median", "N valid", "Parts median"],
+#     ),
+#     style_function=lambda x: {"color": "red", "weight": 5},
+# ).add_to(m3)
 
-m3
+# m3
 # %%
-def add_segments_to_map(m, segments):
-    segments_4326 = segments.to_crs(4326)
+# def add_segments_to_map(m, segments):
+#     segments_4326 = segments.to_crs(4326)
 
-    folium.GeoJson(
-        segments_4326[
-            [
-                "cl_id",
-                "cartway_paved_median_ft",
-                "cartway_span_median_ft",
-                "cartway_n_valid",
-                "cartway_parts_median",
-                "geometry",
-            ]
-        ],
-        name="Highlighted segments",
-        tooltip=folium.GeoJsonTooltip(
-            fields=[
-                "cl_id",
-                "cartway_paved_median_ft",
-                "cartway_span_median_ft",
-                "cartway_n_valid",
-                "cartway_parts_median",
-            ],
-            aliases=[
-                "CL ID",
-                "Paved median",
-                "Span median",
-                "N valid",
-                "Parts median",
-            ],
-        ),
-        style_function=lambda x: {
-            "color": "purple",
-            "weight": 5,
-            "opacity": 0.9,
-        },
-    ).add_to(m)
+#     folium.GeoJson(
+#         segments_4326[
+#             [
+#                 "cl_id",
+#                 "cartway_paved_median_ft",
+#                 "cartway_span_median_ft",
+#                 "cartway_n_valid",
+#                 "cartway_parts_median",
+#                 "geometry",
+#             ]
+#         ],
+#         name="Highlighted segments",
+#         tooltip=folium.GeoJsonTooltip(
+#             fields=[
+#                 "cl_id",
+#                 "cartway_paved_median_ft",
+#                 "cartway_span_median_ft",
+#                 "cartway_n_valid",
+#                 "cartway_parts_median",
+#             ],
+#             aliases=[
+#                 "CL ID",
+#                 "Paved median",
+#                 "Span median",
+#                 "N valid",
+#                 "Parts median",
+#             ],
+#         ),
+#         style_function=lambda x: {
+#             "color": "purple",
+#             "weight": 5,
+#             "opacity": 0.9,
+#         },
+#     ).add_to(m)
 
-    return m
+#     return m
 
-top_segments = (
-    test_out2
-    .sort_values("cartway_paved_median_ft", ascending=False)
-    .head(20)
-    .copy()
-)
+# top_segments = (
+#     test_out2
+#     .sort_values("cartway_paved_median_ft", ascending=False)
+#     .head(20)
+#     .copy()
+# )
 
-m4 = map_width_check(
-    centerlines=test_centerlines,
-    roadways=roadway_polys,
-    transects=test_raw2_c,
-    width_threshold=120,
-)
+# m4 = map_width_check(
+#     centerlines=test_centerlines,
+#     roadways=roadway_polys,
+#     transects=test_raw2_c,
+#     width_threshold=120,
+# )
 
-m4 = add_segments_to_map(m4, top_segments)
+# m4 = add_segments_to_map(m4, top_segments)
 
-m4
+# m4
 
 # %%
-top_segments = (
-    test_out2
-    .sort_values("cartway_paved_median_ft", ascending=False)
-    .head(20)
-    .copy()
-)
+# top_segments = (
+#     test_out2
+#     .sort_values("cartway_paved_median_ft", ascending=False)
+#     .head(20)
+#     .copy()
+# )
 
-roadways_4326 = roadway_polys.to_crs(4326)
-top_segments_4326 = top_segments.to_crs(4326)
+# roadways_4326 = roadway_polys.to_crs(4326)
+# top_segments_4326 = top_segments.to_crs(4326)
 
-m_top = folium.Map(
-    location=[
-        top_segments_4326.geometry.unary_union.centroid.y,
-        top_segments_4326.geometry.unary_union.centroid.x,
-    ],
-    zoom_start=12,
-    tiles="CartoDB positron",
-)
+# m_top = folium.Map(
+#     location=[
+#         top_segments_4326.geometry.unary_union.centroid.y,
+#         top_segments_4326.geometry.unary_union.centroid.x,
+#     ],
+#     zoom_start=12,
+#     tiles="CartoDB positron",
+# )
 
-folium.GeoJson(
-    roadways_4326[["geometry"]],
-    name="Roadway polygons",
-    style_function=lambda x: {
-        "color": "#8ecae6",
-        "weight": 1,
-        "fillOpacity": 0.10,
-    },
-).add_to(m_top)
+# folium.GeoJson(
+#     roadways_4326[["geometry"]],
+#     name="Roadway polygons",
+#     style_function=lambda x: {
+#         "color": "#8ecae6",
+#         "weight": 1,
+#         "fillOpacity": 0.10,
+#     },
+# ).add_to(m_top)
 
-folium.GeoJson(
-    top_segments_4326[
-        [
-            "cl_id",
-            "cartway_paved_median_ft",
-            "cartway_span_median_ft",
-            "cartway_n_valid",
-            "cartway_parts_median",
-            "geometry",
-        ]
-    ],
-    name="Top 20 paved median segments",
-    tooltip=folium.GeoJsonTooltip(
-        fields=[
-            "cl_id",
-            "cartway_paved_median_ft",
-            "cartway_span_median_ft",
-            "cartway_n_valid",
-            "cartway_parts_median",
-        ],
-        aliases=[
-            "CL ID",
-            "Paved median",
-            "Span median",
-            "N valid",
-            "Parts median",
-        ],
-    ),
-    style_function=lambda x: {
-        "color": "red",
-        "weight": 6,
-        "opacity": 1,
-    },
-).add_to(m_top)
+# folium.GeoJson(
+#     top_segments_4326[
+#         [
+#             "cl_id",
+#             "cartway_paved_median_ft",
+#             "cartway_span_median_ft",
+#             "cartway_n_valid",
+#             "cartway_parts_median",
+#             "geometry",
+#         ]
+#     ],
+#     name="Top 20 paved median segments",
+#     tooltip=folium.GeoJsonTooltip(
+#         fields=[
+#             "cl_id",
+#             "cartway_paved_median_ft",
+#             "cartway_span_median_ft",
+#             "cartway_n_valid",
+#             "cartway_parts_median",
+#         ],
+#         aliases=[
+#             "CL ID",
+#             "Paved median",
+#             "Span median",
+#             "N valid",
+#             "Parts median",
+#         ],
+#     ),
+#     style_function=lambda x: {
+#         "color": "red",
+#         "weight": 6,
+#         "opacity": 1,
+#     },
+# ).add_to(m_top)
 
-m_top.fit_bounds(m_top.get_bounds()) # type: ignore
-folium.LayerControl().add_to(m_top)
+# m_top.fit_bounds(m_top.get_bounds()) # type: ignore
+# folium.LayerControl().add_to(m_top)
 
-m_top
+# m_top
 
 ## ALRIGHT! I think we have this cleaned enough - TODO: Get a summary of what you've done, lots of things here
 #%%
@@ -1817,12 +1818,18 @@ stats_df['canopy_pct'] = stats_df['1'] / stats_df['total']
 
 center_line_master_2722['canopy_pct'] = stats_df['canopy_pct'].values
 
-
+#%%
+center_line_master_2722.plot(column="canopy_pct", legend=True, figsize=(20,20), cmap="Greens")
+center_line_master_2722["canopy_pct"].describe()
+center_line_master_2722["has_canopy"] = (center_line_master_2722["canopy_pct"] > 0)
 # %%
 print("Elevation: \n")
+elevation_raster_path = "raw-data/Phila Elevation Raster/Philadelphia_dem_3ft_2022.tif"
+#%%
+
 boundary_2272 = bg_geom.to_crs("EPSG:2272")
 boundary_union = boundary_2272.geometry.union_all()  # single polygon from all block groups
-elevation_raster_path = "raw-data/Phila Elevation Raster/Philadelphia_dem_3ft_2022.tif"
+
 
 with rasterio.open(elevation_raster_path) as src:
     # Force CRS to just the horizontal 2272 
@@ -1971,6 +1978,7 @@ center_line_master_2722.sort_values("percentile_90-10", ascending=False)
 ## if that doesnt work.. its back to the drawing board
 
 #%%
+## Okay here's where we are picking up with our elevation data.
 def sample_along_line(line: LineString, src, n: int = 10) -> list[float]:
     points = [line.interpolate(i / (n - 1), normalized=True) for i in range(n)]
     elevs = []
@@ -1979,6 +1987,7 @@ def sample_along_line(line: LineString, src, n: int = 10) -> list[float]:
         if val > -1e30:
             elevs.append(float(val))
     return elevs
+
 
 with rasterio.open(elevation_raster_path) as src:
     def get_grade(line):
@@ -2035,6 +2044,186 @@ suspicious_ish.plot(
     vmax=suspicious_ish['grade_sampled'].quantile(0.95)
 )
 # i see a bunch of suspicious points... I need the city overlay though to tell more
+# ahh the dashed line seems like vine st expresssway which makes sense.
+# so two things - first ill check this out on the real map,
+# and then I'll apply some smoothing to the elevation so hopefully it's not so jumpy
+ #%%
+import folium
+
+def map_suspicious_grades(
+    centerlines,
+    grade_gdf,
+    grade_col="grade_p90",
+    threshold=0.10,
+    tiles="CartoDB positron",
+):
+    cl_4326 = centerlines.to_crs(4326)
+    sus = grade_gdf[grade_gdf[grade_col].abs() > threshold].copy().to_crs(4326)
+
+    c = sus.geometry.unary_union.centroid if len(sus) else cl_4326.geometry.unary_union.centroid
+
+    m = folium.Map(
+        location=[c.y, c.x],
+        zoom_start=12,
+        tiles=tiles,
+    )
+
+    folium.GeoJson(
+        cl_4326[["geometry"]],
+        name="All centerlines",
+        style_function=lambda x: {
+            "color": "#bbbbbb",
+            "weight": 1,
+            "opacity": 0.5,
+        },
+    ).add_to(m)
+
+    folium.GeoJson(
+        sus[[grade_col, "geometry"]],
+        name=f"{grade_col} > {threshold:.0%}",
+        tooltip=folium.GeoJsonTooltip(
+            fields=[grade_col],
+            aliases=[grade_col],
+            localize=True,
+        ),
+        style_function=lambda x: {
+            "color": "red",
+            "weight": 4,
+            "opacity": 0.9,
+        },
+    ).add_to(m)
+    
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri World Imagery",
+        name="Satellite",
+        overlay=False,
+        control=True,
+    ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    return m
+
+m_grade = map_suspicious_grades(
+    centerlines=center_line_master_2722,  # or your master centerlines
+    grade_gdf=center_line_master_2722,    # whichever GeoDataFrame has the grade column
+    grade_col="grade_sampled",              # replace with your actual grade column
+    threshold=0.10,
+)
+
+m_grade.save("maps/grades.html")
+
+#%%
+# Alright! So, the above isn't the worst. We have clearly identified bridges and overpasses as
+# as most of the suspicious areas. Now, we'll attempt to better handle those by smoothing over the
+# raster data. At 3ft, it's very detailed and thus one wrong point could mess up our analysis. We don't
+# want to eliminate the data, just smooth it over a bit.
+
+# also, our current grade is based on “total elevation variation over segment length.”
+# thats okay, but again, we can do better.
+
+def smooth_and_calc_grade(group, elev_col="elev_ft", station_col="length", window=5):
+    g = group.sort_values(station_col).copy()
+
+    g["elev_smooth_ft"] = (
+        g[elev_col]
+        .rolling(window=window, center=True, min_periods=2)
+        .median()
+    )
+
+    g["elev_smooth_ft"] = g["elev_smooth_ft"].fillna(g[elev_col])
+
+    dx = g[station_col].diff()
+
+    g["grade_raw"] = g[elev_col].diff() / dx
+    g["grade_smooth"] = g["elev_smooth_ft"].diff() / dx
+    g["abs_grade_smooth"] = g["grade_smooth"].abs()
+
+    return g
+
+def sample_profile_along_line(line: LineString, src, n: int = 10):
+    rows = []
+
+    for i in range(n):
+        frac = i / (n - 1)
+        station_ft = frac * line.length
+        p = line.interpolate(frac, normalized=True)
+
+        val = next(src.sample([(p.x, p.y)]))[0]
+
+        if val > -1e30:
+            rows.append({
+                "station_ft": station_ft,
+                "elev_ft": float(val),
+            })
+
+    return rows
+
+def get_grade_smoothed(line, src, n=10, window=5):
+    prof = sample_profile_along_line(line, src, n=n)
+
+    if len(prof) < 2 or line.length == 0:
+        return np.nan, np.nan, np.nan, np.nan
+
+    g = pd.DataFrame(prof).sort_values("station_ft")
+
+    g["elev_smooth_ft"] = (
+        g["elev_ft"]
+        .rolling(window=window, center=True, min_periods=2)
+        .median()
+    ).fillna(g["elev_ft"])
+
+    dx = g["station_ft"].diff()
+    dz = g["elev_smooth_ft"].diff()
+
+    interval_grades = (dz / dx).abs().replace([np.inf, -np.inf], np.nan).dropna()
+
+    grade_range_smooth = (
+        g["elev_smooth_ft"].max() - g["elev_smooth_ft"].min()
+    ) / line.length
+
+    if len(interval_grades) == 0:
+        return grade_range_smooth, np.nan, np.nan, np.nan
+
+    return (
+        grade_range_smooth,
+        interval_grades.median(),
+        interval_grades.quantile(0.90),
+        interval_grades.max(),
+    )
+    
+with rasterio.open(elevation_raster_path) as src:
+    results = center_line_master_2722.geometry.apply(
+        lambda line: get_grade_smoothed(line, src, n=10, window=5)
+    )
+
+center_line_master_2722["grade_range_smooth"] = results.apply(lambda x: x[0])
+center_line_master_2722["grade_smooth_median"] = results.apply(lambda x: x[1])
+center_line_master_2722["grade_smooth_p90"] = results.apply(lambda x: x[2])
+center_line_master_2722["grade_smooth_max"] = results.apply(lambda x: x[3])
+
+#%%
+## Get more diverse readings
+center_line_master_2722.plot(
+    column="grade_range_smooth",
+    legend=True,
+    figsize=(12, 12),
+    vmax=0.17
+)
+
+
+steep_smooth = center_line_master_2722[
+    center_line_master_2722["grade_range_smooth"] > 0.10
+]
+
+ax = center_line_master_2722.plot(figsize=(12, 12), color="lightgray", linewidth=0.4)
+steep_smooth.plot(ax=ax, color="red", linewidth=1.5)
+
+#%%
+with rasterio.open(elevation_raster_path) as src:
+    print(src.crs)
+    print(src.res)
+    print(src.bounds)
 
 # %%
 print("PPD Street Trees ")

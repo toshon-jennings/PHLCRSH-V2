@@ -9,7 +9,7 @@ Plan so I can just start slotting things in (while data processes).
 
 1 - "To which degree, if any, does vehicle crash data in Philadelphia correlate with natural factors as much as non-natural factors." <- This needs to be refined a bit, because elevation is not really "natural" - but tree coverage is of course. The general thrust of the research is to both surface physical factors that have been widly known (CITATION NEEDED) to cause more accidents (width of streets/number of lanes/calming measures and infrastructure) and more "natural factors" like tree coverage and elevation. 
 
-2+3 - The datasets and data processing. Easy parts and tough parts.
+2+3 - The datasets and data processing. Easy parts and tough parts. Discuss how crash data does have some of these but often a boolean or categorical field rather than more precise spatial data.
 
 Easy parts are things like census data and vector data thats fairly easy to join, do have to think about the type of join, and you know do we choose buffers or not? Will buffers pick up too much?
 

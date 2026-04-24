@@ -23,3 +23,13 @@ For this project, we're interested in geometry, not habitats. We're going to mak
 Of course, real life is messy. Roads aren't uniform and neither is our curb cutout data. That's why we take multiple samples along each centerline segment and then use the median to reduce influence of nasty outliers.
 
 This is a pretty intensive process - taking a while.
+
+
+## Elevation sampling
+
+Check out some of these suspicious grades:
+![alt text](sus-grades.png)
+
+![alt text](sus-grade-over-bridge.png)
+
+![Vine Street Grades](vinest.png)
