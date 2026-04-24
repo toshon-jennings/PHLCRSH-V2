@@ -2,12 +2,19 @@
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+
+from shapely.geometry.point import Point
+from shapely.geometry import LineString
+
 import rasterio
+from rasterio.mask import mask
+from rasterstats import zonal_stats
 import osmnx as ox
 
 from rasterio.plot import show
 import matplotlib.pyplot as plt
 import seaborn as sns
+import cmocean.cm as cmo
 
 import pygris
 import census
@@ -16,6 +23,7 @@ import requests
 
 import os
 
+#%%
 
 
 # transforms df to 2272 and writes it to specified filepath
@@ -32,7 +40,10 @@ def to_2272_file(df, filepath):
         df_2272 = gpd.read_file(filepath)
 
     return df_2272
-    
+
+
+def get_midpoint(gdf: gpd.GeoDataFrame): 
+    return gdf.geometry.interpolate(0.5, normalized=True)
 
 
 # %%
@@ -435,6 +446,949 @@ print(roadways["width_ft"].describe())
 # roadways_matched["dist_ft"].describe() # worse than the width feet.
 # I'll come back to this, but when we do, we should be able to try to match the state roads with our calculations.
 # and this is clearly wrong, the above is better.
+## - try again
+
+from shapely.ops import unary_union
+from shapely import make_valid
+import shapely
+
+
+def _prep_gdf(gdf, epsg=2272):
+    out = gdf.copy()
+
+    if out.crs is None:
+        raise ValueError("Input GeoDataFrame has no CRS. Set CRS before measuring widths.")
+
+    out = out.to_crs(epsg)
+    out = out[out.geometry.notna() & ~out.geometry.is_empty].copy()
+    out["geometry"] = out.geometry.map(lambda g: make_valid(g) if not g.is_valid else g)
+    out = out[out.geometry.notna() & ~out.geometry.is_empty].copy()
+
+    return out
+
+
+def _line_parts(g):
+    """
+    Extract line components from a Shapely intersection result.
+    Ignores points because points have no cross-section width.
+    """
+    if g is None or g.is_empty:
+        return []
+
+    if g.geom_type == "LineString":
+        return [g] if g.length > 0 else []
+
+    if g.geom_type == "MultiLineString":
+        return [p for p in g.geoms if p.length > 0]
+
+    if g.geom_type == "GeometryCollection":
+        parts = []
+        for p in g.geoms:
+            parts.extend(_line_parts(p))
+        return parts
+
+    return []
+
+
+def make_perpendicular_transects(
+    centerlines,
+    id_col="cl_id",
+    spacing_ft=25,
+    trim_ft=25,
+    half_len_ft=175,
+    tangent_delta_ft=5,
+):
+    """
+    Build repeated perpendicular transects along each centerline.
+
+    spacing_ft: distance between transects along centerline.
+    trim_ft: avoids intersection flares near segment ends.
+    half_len_ft: transect extends this far left and right from centerline.
+    tangent_delta_ft: small distance used to estimate local tangent.
+    """
+    rows = []
+
+    for _, row in centerlines.iterrows():
+        line = row.geometry
+
+        if line is None or line.is_empty or line.length <= 0:
+            continue
+
+        L = float(line.length)
+
+        # Avoid over-trimming short segments.
+        trim = min(float(trim_ft), max(0.0, (L - 1.0) / 2.0))
+
+        if L - 2 * trim < max(1.0, spacing_ft):
+            stations = np.array([L / 2.0]) 
+        else:
+            stations = np.arange(trim, L - trim + 1e-9, float(spacing_ft)) # a nudge to include stations at endpoints
+            if len(stations) == 0:
+                stations = np.array([L / 2.0]) # fallback to one station at the midpoint
+
+        # loop through stations and make transects for each, j, s are index and value
+        for j, s in enumerate(stations):
+            p = line.interpolate(float(s)) # get the station point on the line
+
+            # we need to determine the direction the centerline is going
+            # at this particular station. We can't do that from one point
+            # so we sample a couple on either end of the station
+            s0 = max(0.0, float(s) - float(tangent_delta_ft))
+            s1 = min(L, float(s) + float(tangent_delta_ft))
+
+            # edge cases where our +delta is the same or less than -delta
+            if s1 <= s0:
+                continue
+            
+            # get each of the "sub-station" points on the centerline    
+            a = line.interpolate(s0)
+            b = line.interpolate(s1)
+
+            # calcluate the change in x and the change in y
+            # to get the cartesian distance between the two points
+            dx, dy = b.x - a.x, b.y - a.y
+            d = np.hypot(dx, dy)
+
+            if d == 0:
+                continue
+
+            # Calculate the unit normal to the tangent. Normals are perpendicular to a line,
+            # exactly what we want.
+            # this works by:
+            # rotating 90 deg (-dy)
+            # and then normalizing to the unit vector (divide by the distance)
+            nx, ny = -dy / d, dx / d
+            
+            # now build the transect by:
+            # starting at the station point
+            # and adding or subtracting our (estimated) half_len_ft offset
+            # along the vector direction
+            transect = LineString([
+                (p.x - half_len_ft * nx, p.y - half_len_ft * ny),
+                (p.x + half_len_ft * nx, p.y + half_len_ft * ny),
+            ])
+            
+            # and let's just append the rows
+            rows.append({
+                id_col: row[id_col],
+                "transect_no": j,
+                "station_ft": float(s),
+                "geometry": transect,
+            })
+
+    return gpd.GeoDataFrame(rows, geometry="geometry", crs=centerlines.crs)
+
+
+def measure_transect_widths(
+    transects,
+    surfaces,
+    id_col="cl_id",
+    grid_size_ft=None,
+):
+    """
+    Intersect transects with cartway/curb polygons.
+
+    paved_width_ft = sum of all line pieces inside polygon.
+    span_width_ft = outermost-to-outermost cross-section span.
+    """
+    if transects.empty:
+        return gpd.GeoDataFrame(
+            columns=[
+                id_col,
+                "transect_no",
+                "station_ft",
+                "paved_width_ft",
+                "span_width_ft",
+                "n_parts",
+                "center_covered",
+                "geometry",
+            ],
+            geometry="geometry",
+            crs=transects.crs,
+        )
+
+    surfaces = surfaces.to_crs(transects.crs)
+
+    # Bulk spatial-index query. pairs[0] = transect positions; pairs[1] = surface positions.
+    pairs = surfaces.sindex.query(transects.geometry, predicate="intersects")
+
+    groups = {}
+    if pairs.size:
+        pair_df = pd.DataFrame({
+            "tx_pos": pairs[0],
+            "surf_pos": pairs[1],
+        })
+
+        for tx_pos, g in pair_df.groupby("tx_pos", sort=False):
+            tx_i = int(np.asarray(tx_pos).item())
+            groups[tx_i] = g["surf_pos"].to_numpy(dtype=np.int64)
+            
+    records = []
+
+    tx_geoms = transects.geometry.to_numpy()
+    surface_geoms = surfaces.geometry.reset_index(drop=True)
+    from time import perf_counter
+    t0 = perf_counter()
+    for tx_pos, t in enumerate(tx_geoms):
+        # profiling
+        if tx_pos % 5000 == 0 and tx_pos > 0:
+            elapsed = perf_counter() - t0
+            rate = tx_pos / elapsed
+            remaining = (len(tx_geoms) - tx_pos) / rate
+
+            print(
+                f"{tx_pos:,}/{len(tx_geoms):,} transects | "
+                f"{rate:,.1f}/sec | "
+                f"{remaining/60:,.1f} min left"
+            )
+        surf_pos = groups.get(tx_pos)
+
+        if surf_pos is None or len(surf_pos) == 0:
+            paved_width = np.nan
+            span_width = np.nan
+            n_parts = 0
+            center_covered = False
+
+        else:
+            # Union only nearby candidate polygons, not the whole city.
+            surf = unary_union(list(surface_geoms.iloc[surf_pos].values))
+
+            if grid_size_ft:
+                inter = shapely.intersection(t, surf, grid_size=grid_size_ft)
+            else:
+                inter = t.intersection(surf)
+
+            parts = _line_parts(inter)
+
+            paved_width = float(sum(p.length for p in parts)) if parts else np.nan
+            n_parts = len(parts)
+
+            if parts:
+                projected_ends = []
+
+                for p in parts:
+                    projected_ends.append(t.project(Point(p.coords[0])))
+                    projected_ends.append(t.project(Point(p.coords[-1])))
+
+                span_width = float(max(projected_ends) - min(projected_ends))
+            else:
+                span_width = np.nan
+
+            center_covered = bool(surf.covers(t.interpolate(t.length / 2.0)))
+
+        records.append({
+            id_col: transects.iloc[tx_pos][id_col],
+            "transect_no": transects.iloc[tx_pos]["transect_no"],
+            "station_ft": transects.iloc[tx_pos]["station_ft"],
+            "paved_width_ft": paved_width,
+            "span_width_ft": span_width,
+            "n_parts": n_parts,
+            "center_covered": center_covered,
+            "geometry": t,
+        })
+
+    return gpd.GeoDataFrame(records, geometry="geometry", crs=transects.crs)
+
+
+def summarize_widths(
+    raw,
+    id_col="cl_id",
+    prefix="cartway",
+    min_width_ft=4,
+    max_width_ft=250,
+):
+    """
+    Summarize transect widths back to centerline segments.
+    Median is preferred over mean because intersections/flares create outliers.
+    """
+    x = raw.copy()
+
+    x["valid_width"] = (
+        x["span_width_ft"].notna()
+        & x["span_width_ft"].between(min_width_ft, max_width_ft)
+    )
+
+    good = x[x["valid_width"]].copy()
+
+    all_counts = x.groupby(id_col).size().rename(f"{prefix}_n_transects")
+    valid_counts = good.groupby(id_col).size().rename(f"{prefix}_n_valid")
+
+    stats = good.groupby(id_col).agg(
+        span_median_ft=("span_width_ft", "median"),
+        span_p25_ft=("span_width_ft", lambda s: s.quantile(0.25)),
+        span_p75_ft=("span_width_ft", lambda s: s.quantile(0.75)),
+        paved_median_ft=("paved_width_ft", "median"),
+        paved_p25_ft=("paved_width_ft", lambda s: s.quantile(0.25)),
+        paved_p75_ft=("paved_width_ft", lambda s: s.quantile(0.75)),
+        parts_median=("n_parts", "median"),
+        center_covered_share=("center_covered", "mean"),
+    ).add_prefix(prefix + "_")
+
+    summary = all_counts.to_frame().join(valid_counts).join(stats)
+    summary[f"{prefix}_valid_share"] = (
+        summary[f"{prefix}_n_valid"] / summary[f"{prefix}_n_transects"]
+    )
+
+    return summary.reset_index()
+
+
+def widths_by_centerline(
+    centerlines,
+    surfaces,
+    prefix="cartway",
+    id_col="cl_id",
+    epsg=2272,
+    spacing_ft=25,
+    trim_ft=25,
+    half_len_ft=175,
+    tangent_delta_ft=5,
+    min_width_ft=4,
+    max_width_ft=250,
+    grid_size_ft=None,
+):
+    """
+    Main wrapper.
+
+    centerlines: LineString centerline GeoDataFrame.
+    surfaces: Polygon cartway/curb/roadway GeoDataFrame.
+    """
+    cl = centerlines.copy()
+
+    if id_col not in cl.columns:
+        cl = cl.reset_index(drop=True)
+        cl[id_col] = cl.index
+
+    cl = _prep_gdf(cl, epsg=epsg)
+    surfaces = _prep_gdf(surfaces, epsg=epsg)
+
+    # Explode multipart centerlines, but keep original cl_id for summarizing.
+    cl_parts = cl.explode(index_parts=False).reset_index(drop=True)
+    cl_parts = cl_parts[
+        cl_parts.geometry.geom_type.isin(["LineString", "MultiLineString"])
+    ].copy()
+
+    transects = make_perpendicular_transects(
+        cl_parts,
+        id_col=id_col,
+        spacing_ft=spacing_ft,
+        trim_ft=trim_ft,
+        half_len_ft=half_len_ft,
+        tangent_delta_ft=tangent_delta_ft,
+    )
+
+    raw = measure_transect_widths(
+        transects,
+        surfaces,
+        id_col=id_col,
+        grid_size_ft=grid_size_ft,
+    )
+
+    summary = summarize_widths(
+        raw,
+        id_col=id_col,
+        prefix=prefix,
+        min_width_ft=min_width_ft,
+        max_width_ft=max_width_ft,
+    )
+
+    out = cl.merge(summary, on=id_col, how="left")
+
+    return out, raw, transects
+
+#%%
+%%time
+
+### - RUNNING
+centerlines = center_line_subset.copy()
+roadway_polys = roadways.copy()
+
+# this is taking FOREVER :) MUCH MUCH Quicker with 2k and spacing ft at 75.
+test_centerlines = centerlines.sample(2000, random_state=1)
+test_out, test_raw, test_transects = widths_by_centerline(
+    centerlines=test_centerlines,
+    surfaces=roadway_polys,
+    prefix="cartway",
+    id_col="cl_id",
+    spacing_ft=75,
+    trim_ft=25,
+    half_len_ft=175,
+)
+
+# centerlines_w_cartway, cartway_raw, cartway_transects = widths_by_centerline(
+#     centerlines=centerlines,
+#     surfaces=roadway_polys,
+#     prefix="cartway",
+#     id_col="cl_id",
+#     epsg=2272,
+#     spacing_ft=25,
+#     trim_ft=25,
+#     half_len_ft=175,
+#     min_width_ft=4,
+#     max_width_ft=250,
+# )
+
+#%%
+# we'll need to QA the results before we move on and run the entire shit.
+test_raw[["paved_width_ft", "span_width_ft", "n_parts", "center_covered"]].describe()
+
+test_out[
+    ["cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+].describe()
+
+test_out.sort_values("cartway_span_median_ft", ascending=False)[
+    ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+].head(20)
+
+test_out.sort_values("cartway_span_median_ft", ascending=True)[
+    ["cl_id", "cartway_span_median_ft", "cartway_paved_median_ft", "cartway_valid_share"]
+].head(20)
+
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.25)
+test_out.plot(
+    ax=ax,
+    column="cartway_span_median_ft",
+    legend=True,
+    linewidth=1,
+) # looks pretty sane to me at first glance?
+
+wide_raw = test_raw[test_raw["span_width_ft"] > 120]
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+wide_raw.plot(ax=ax, color="red", linewidth=1) # hmmmm less enthusiasm.. lots of 120 wide streets.
+test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
+
+wide_raw = test_raw[test_raw["span_width_ft"] > 120].copy()
+wide_raw[["span_width_ft", "paved_width_ft", "n_parts", "center_covered"]].describe()
+
+# compare span vs paved
+wide_raw["gap_ft"] = wide_raw["span_width_ft"] - wide_raw["paved_width_ft"]
+
+wide_raw[["span_width_ft", "paved_width_ft", "gap_ft", "n_parts"]].describe()
+
+top_wide = test_raw.sort_values("span_width_ft", ascending=False).head(20)
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+top_wide.plot(ax=ax, color="red", linewidth=2)
+test_centerlines.to_crs(2272).plot(ax=ax, color="black", linewidth=0.5)
+# So this looks a bit more promising... it seems like we're hitting mostly intersections or other weird outliers
+# Let's see if we can do better:
+#%%
+
+test_out2, test_raw2, test_transects2 = widths_by_centerline(
+    centerlines=test_centerlines,
+    surfaces=roadway_polys,
+    prefix="cartway",
+    id_col="cl_id",
+    spacing_ft=75,
+    trim_ft=50,
+    half_len_ft=125,
+)
+
+#%%
+wide_raw_2 = test_raw2[test_raw2["span_width_ft"] > 120]
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+wide_raw_2.plot(ax=ax, color="red", linewidth=1) # This is much much better. At this point I need to really dig into what I'm dealing with
+
+test_raw2_c = test_raw2.copy()
+test_raw2_c["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
+
+import folium
+import geopandas as gpd
+
+def map_width_check(centerlines, roadways, transects, width_threshold=120):
+    roadways_4326 = roadways.to_crs(4326)
+    centerlines_4326 = centerlines.to_crs(4326)
+
+    wide_tx = transects[transects["span_width_ft"] > width_threshold].copy()
+    wide_tx_4326 = wide_tx.to_crs(4326)
+
+    # Center map on Philly-ish centroid of your data
+    c = roadways_4326.unary_union.centroid
+    m = folium.Map(
+        location=[c.y, c.x],
+        zoom_start=12,
+        tiles="CartoDB positron"
+    )
+
+    folium.GeoJson(
+        roadways_4326[["geometry"]],
+        name="Roadway polygons",
+        style_function=lambda x: {
+            "color": "#8ecae6",
+            "weight": 1,
+            "fillOpacity": 0.15,
+        },
+    ).add_to(m)
+
+    folium.GeoJson(
+        centerlines_4326[["geometry"]],
+        name="Centerlines",
+        style_function=lambda x: {
+            "color": "black",
+            "weight": 1,
+            "opacity": 0.5,
+        },
+    ).add_to(m)
+
+    folium.GeoJson(
+        wide_tx_4326[["span_width_ft", "paved_width_ft", "gap_ft", "n_parts", "center_covered", "geometry"]],
+        name=f"Transects > {width_threshold} ft",
+        tooltip=folium.GeoJsonTooltip(
+            fields=["span_width_ft", "paved_width_ft", "gap_ft", "n_parts", "center_covered"],
+            aliases=["Span ft", "Paved ft", "Gap ft", "Parts", "Center covered"],
+        ),
+        style_function=lambda x: {
+            "color": "red",
+            "weight": 3,
+            "opacity": 0.9,
+        },
+    ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    return m
+
+
+m2 = map_width_check(
+    centerlines=test_centerlines,
+    roadways=roadway_polys,
+    transects=test_raw2_c,
+    width_threshold=120,
+)
+
+m2
+
+# AHAH we can see from the "Bad" examples that we're 
+#%%
+wide_paved_2 = test_raw2[test_raw2["paved_width_ft"] > 120]
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(10, 10), alpha=0.25)
+wide_paved_2.plot(ax=ax, color="red", linewidth=1)
+wide_paved_2["gap_ft"] = test_raw2["span_width_ft"] - test_raw2["paved_width_ft"]
+
+m3 = map_width_check(
+    centerlines=test_centerlines,
+    roadways=roadway_polys,
+    transects=wide_paved_2,
+    width_threshold=120,
+)
+
+test_out2.plot(
+    column="cartway_paved_median_ft",
+    legend=True,
+    figsize=(12, 12),
+    vmin=0,
+    vmax=100,
+)
+
+# This distribution looks pretty sane to me.
+# The max yeah some cause for concern, btu we're cleaning up well.
+# count    1981.000000
+# mean       38.478735
+# std        23.620443
+# min         5.129544
+# 25%        25.539738
+# 50%        33.405994
+# 75%        42.793088
+# max       250.000000
+# Name: cartway_paved_median_ft, dtype: float64
+#%%
+test_out2.sort_values("cartway_paved_median_ft", ascending=False)[
+    [
+        "cl_id",
+        "cartway_paved_median_ft",
+        "cartway_span_median_ft",
+        "cartway_valid_share",
+        "cartway_n_valid",
+        "cartway_parts_median",
+    ]
+].head(20)
+
+## ah we need labels to determine what is what
+
+top_ids = (
+    test_out2
+    .sort_values("cartway_paved_median_ft", ascending=False)
+    .head(20)["cl_id"]
+    .tolist()
+)
+
+top_segments = test_out2[test_out2["cl_id"].isin(top_ids)].copy()
+
+ax = roadway_polys.to_crs(2272).plot(figsize=(12, 12), alpha=0.2)
+test_out2.plot(ax=ax, color="lightgray", linewidth=0.5)
+top_segments.plot(ax=ax, color="red", linewidth=3)
+
+# label each red segment with cl_id
+for _, r in top_segments.iterrows():
+    p = r.geometry.representative_point()
+    ax.annotate(
+        str(r["cl_id"]),
+        xy=(p.x, p.y),
+        fontsize=9,
+        color="black",
+        bbox=dict(facecolor="white", alpha=0.7, edgecolor="none")
+    )
+    
+top_segments_4326 = top_segments.to_crs(4326)
+
+m3 = folium.Map(
+    location=[
+        top_segments_4326.geometry.unary_union.centroid.y,
+        top_segments_4326.geometry.unary_union.centroid.x
+    ],
+    zoom_start=12,
+    tiles="CartoDB positron"
+)
+
+folium.GeoJson(
+    top_segments_4326[
+        ["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median", "geometry"]
+    ],
+    tooltip=folium.GeoJsonTooltip(
+        fields=["cl_id", "cartway_paved_median_ft", "cartway_span_median_ft", "cartway_n_valid", "cartway_parts_median"],
+        aliases=["CL ID", "Paved median", "Span median", "N valid", "Parts median"],
+    ),
+    style_function=lambda x: {"color": "red", "weight": 5},
+).add_to(m3)
+
+m3
+# %%
+def add_segments_to_map(m, segments):
+    segments_4326 = segments.to_crs(4326)
+
+    folium.GeoJson(
+        segments_4326[
+            [
+                "cl_id",
+                "cartway_paved_median_ft",
+                "cartway_span_median_ft",
+                "cartway_n_valid",
+                "cartway_parts_median",
+                "geometry",
+            ]
+        ],
+        name="Highlighted segments",
+        tooltip=folium.GeoJsonTooltip(
+            fields=[
+                "cl_id",
+                "cartway_paved_median_ft",
+                "cartway_span_median_ft",
+                "cartway_n_valid",
+                "cartway_parts_median",
+            ],
+            aliases=[
+                "CL ID",
+                "Paved median",
+                "Span median",
+                "N valid",
+                "Parts median",
+            ],
+        ),
+        style_function=lambda x: {
+            "color": "purple",
+            "weight": 5,
+            "opacity": 0.9,
+        },
+    ).add_to(m)
+
+    return m
+
+top_segments = (
+    test_out2
+    .sort_values("cartway_paved_median_ft", ascending=False)
+    .head(20)
+    .copy()
+)
+
+m4 = map_width_check(
+    centerlines=test_centerlines,
+    roadways=roadway_polys,
+    transects=test_raw2_c,
+    width_threshold=120,
+)
+
+m4 = add_segments_to_map(m4, top_segments)
+
+m4
+
+# %%
+top_segments = (
+    test_out2
+    .sort_values("cartway_paved_median_ft", ascending=False)
+    .head(20)
+    .copy()
+)
+
+roadways_4326 = roadway_polys.to_crs(4326)
+top_segments_4326 = top_segments.to_crs(4326)
+
+m_top = folium.Map(
+    location=[
+        top_segments_4326.geometry.unary_union.centroid.y,
+        top_segments_4326.geometry.unary_union.centroid.x,
+    ],
+    zoom_start=12,
+    tiles="CartoDB positron",
+)
+
+folium.GeoJson(
+    roadways_4326[["geometry"]],
+    name="Roadway polygons",
+    style_function=lambda x: {
+        "color": "#8ecae6",
+        "weight": 1,
+        "fillOpacity": 0.10,
+    },
+).add_to(m_top)
+
+folium.GeoJson(
+    top_segments_4326[
+        [
+            "cl_id",
+            "cartway_paved_median_ft",
+            "cartway_span_median_ft",
+            "cartway_n_valid",
+            "cartway_parts_median",
+            "geometry",
+        ]
+    ],
+    name="Top 20 paved median segments",
+    tooltip=folium.GeoJsonTooltip(
+        fields=[
+            "cl_id",
+            "cartway_paved_median_ft",
+            "cartway_span_median_ft",
+            "cartway_n_valid",
+            "cartway_parts_median",
+        ],
+        aliases=[
+            "CL ID",
+            "Paved median",
+            "Span median",
+            "N valid",
+            "Parts median",
+        ],
+    ),
+    style_function=lambda x: {
+        "color": "red",
+        "weight": 6,
+        "opacity": 1,
+    },
+).add_to(m_top)
+
+m_top.fit_bounds(m_top.get_bounds()) # type: ignore
+folium.LayerControl().add_to(m_top)
+
+m_top
+
+## ALRIGHT! I think we have this cleaned enough - TODO: Get a summary of what you've done, lots of things here
+#%%
+%%time
+
+# load from below before so we dont have to do this again
+# full_out, full_raw, full_transects = widths_by_centerline(
+#     centerlines=centerlines,
+#     surfaces=roadway_polys,
+#     prefix="cartway",
+#     id_col="cl_id",
+#     spacing_ft=75,
+#     trim_ft=50,
+#     half_len_ft=125,
+# )
+
+full_out = gpd.read_file("transformed-data/Stash or final/philly_centerlines_cartway_widths.gpkg", layer="widths")
+full_raw = gpd.read_file("transformed-data/Stash or final/philly_cartway_width_transects_raw.gpkg", layer="raw_transects")
+full_transects = gpd.read_file("transformed-data/Stash or final/philly_cartway_width_transects.gpkg", layer="transects")
+
+full_out["cartway_width_ft"] = full_out["cartway_paved_median_ft"]
+
+full_out["width_confidence"] = np.select(
+    [
+        full_out["cartway_n_valid"].fillna(0) >= 3,
+        full_out["cartway_n_valid"].fillna(0) == 2,
+        full_out["cartway_n_valid"].fillna(0) == 1,
+    ],
+    [
+        "good",
+        "okay",
+        "low_one_or_two_transects",
+    ],
+    default="missing",
+)
+
+
+#%%
+
+# great -let's save the data before we do anyting stupid (processing time is 31 mins)
+# full_out["width_method"] = "perpendicular_transect_paved_median"
+# full_out["width_spacing_ft"] = 75
+# full_out["width_trim_ft"] = 50
+# full_out["width_half_len_ft"] = 125
+# full_out.to_file("transformed-data/Stash or final/philly_centerlines_cartway_widths.gpkg", layer="widths", driver="GPKG")
+# full_raw.to_file("transformed-data/Stash or final/philly_cartway_width_transects_raw.gpkg", layer="raw_transects", driver="GPKG")
+# full_transects.to_file("transformed-data/Stash or final/philly_cartway_width_transects.gpkg", layer="transects", driver="GPKG")
+full_out["cartway_width_ft"].describe()
+qa_confidence = full_out.groupby("width_confidence")["cartway_width_ft"].describe()
+
+problem = full_out[full_out["width_confidence"].isin(["low_one_or_two_transects", "missing"])]
+
+ax = full_out.plot(figsize=(12, 12), color="lightgray", linewidth=0.3)
+problem.plot(ax=ax, color="red", linewidth=1)
+
+good_or_okay_widths = full_out[full_out["width_confidence"].isin(["good", "okay"])].copy()
+all_widths = all_widths = full_out.copy()
+# so we've spent a lot of time on this, and I think we have a pretty good analysis - we've got confidence levels, which is a really big part
+# of analysis. It's much better to say, hey we're pretty confident that these streets are very wide.
+
+##KEY
+# Widths were calculated from perpendicular transects every 75 ft, trimmed 50 ft from segment ends. 
+# Primary width is median paved transect width. Confidence reflects number of valid transects per segment, so short blocks are more likely to be low-confidence.
+
+#%%
+
+# GREAT I Am fucking psyched we have the width data.
+# Now to merge back to master
+width_cols = [
+    "seg_id",
+    "cartway_width_ft",
+    "cartway_paved_median_ft",
+    "cartway_span_median_ft",
+    "cartway_valid_share",
+    "cartway_n_valid",
+    "cartway_parts_median",
+    "width_confidence",
+    "width_method",
+    "width_spacing_ft",
+    "width_trim_ft",
+    "width_half_len_ft",
+]
+
+centerlines_with_width = center_line_master_2722.merge(
+    full_out[width_cols],
+    on="seg_id",
+    how="left",
+)
+
+centerlines_with_width.to_file(
+    "transformed-data/Stash or final/philly_centerlines_with_cartway_widths.gpkg",
+    layer="centerlines_widths",
+    driver="GPKG",
+)
+
+### - end transect / centerline
+
+#%%
+
+# now let's compare to state road width
+# RESULT -
+# PennDOT TOTAL_WIDT comparison was attempted as an external validation check, 
+# but matched state-road records showed near-zero correlation with the transect-derived cartway widths. 
+# Because of likely definition mismatch and/or route inventory conflation issues, 
+# PennDOT widths were not used to calibrate the derived width field.
+
+# This is a good follow up investigation or one to incorporate if we have more timne.
+state_roads = gpd.read_file("raw-data/PA State Roads/state_roads_philly.geojson")
+print(state_roads.crs) # still good - obsessive checking :)
+state_roads_cpy = state_roads.copy()
+clw = centerlines_with_width.copy()
+# state roads are linestrings so use join nearest
+compare = gpd.sjoin_nearest(
+    state_roads_cpy,
+    clw[
+        [
+            "seg_id",
+            "cartway_width_ft",
+            "cartway_span_median_ft",
+            "width_confidence",
+            "cartway_n_valid",
+            "geometry",
+        ]
+    ],
+    how="left",
+    max_distance=50,
+    distance_col="match_dist_ft",
+)
+
+compare["width_diff_ft"] = (
+    compare["cartway_width_ft"] - compare["TOTAL_WIDT"]
+)
+
+# hmm with all data, including bad, we're not doing great
+# count    5302.000000
+# mean       27.640088
+# std        32.083978
+# min         0.000341
+# 25%         6.779268
+# 50%        16.447861
+# 75%        36.396950
+# max       216.000000
+compare["abs_width_diff_ft"] = compare["width_diff_ft"].abs()
+
+
+compare_clean = compare[
+    (compare["TOTAL_WIDT"].notna())
+    & (compare["TOTAL_WIDT"] > 0)
+    & (compare["cartway_width_ft"].notna())
+    & (compare["width_confidence"].isin(["good", "okay"]))
+    & (compare["match_dist_ft"] <= 25)
+].copy()
+
+compare_clean["width_diff_ft"] = (
+    compare_clean["cartway_width_ft"] - compare_clean["TOTAL_WIDT"]
+)
+
+compare_clean["abs_width_diff_ft"] = compare_clean["width_diff_ft"].abs()
+
+compare_clean["abs_width_diff_ft"].describe()
+
+
+
+
+# still a tough go
+# count    4485.000000
+# mean       24.168872
+# std        25.153998
+# min         0.000341
+# 25%         6.640863
+# 50%        15.528496
+# 75%        33.476255
+# max       150.818152
+
+# signed
+# count    4485.000000
+# mean       11.273550
+# std        33.013134
+# min       -71.257175
+# 25%        -9.969765
+# 50%         1.089338
+# 75%        27.829236
+# max       150.818152
+# Name: width_diff_ft, dtype: float64
+
+compare_clean.plot.scatter(
+    x="TOTAL_WIDT",
+    y="cartway_width_ft",
+    figsize=(7, 7),
+    alpha=0.3,
+)
+
+cmp2 = compare[
+    (compare["width_confidence"].isin(["good", "okay"])) &
+    (compare["match_dist_ft"] <= 10) &
+    (compare["TOTAL_WIDT"] > 0)
+].copy()
+
+cmp2.plot.scatter(
+    x="TOTAL_WIDT",
+    y="cartway_width_ft",
+    figsize=(7, 7),
+    alpha=0.3,
+)
+
+compare["seg_id"].value_counts().describe()
+
 
 # %% [markdown]
 # ### Traffic Calming Devices
@@ -605,8 +1559,8 @@ speed_by_class = {
 center_line_master_speeds = center_line_master_2722.copy()
 
 
-center_line_master_speeds['midpoint'] = center_line_master_speeds.geometry.interpolate(0.5, normalized=True)
-edges['midpoint'] = edges.geometry.interpolate(0.5, normalized=True)
+center_line_master_speeds['midpoint'] = get_midpoint(center_line_master_speeds)
+edges['midpoint'] = get_midpoint(edges)
 
 # Create point GeoDataFrames for the join
 centerlines_pts = center_line_master_speeds.set_geometry('midpoint').drop(columns='geometry').rename_geometry('geometry')
@@ -657,8 +1611,10 @@ matched[matched["lanes_clean"].notna()][["lanes", "lanes_clean"]]
 matched[matched["maxspeed_clean"].notna()][["maxspeed", "maxspeed_clean"]]
 
 
+# %% [markdown]
+# ### State Roads
+
 # %%
-# TODO: Fill state road data
 url = "https://mapservices.pasda.psu.edu/server/rest/services/pasda/PennDOT/MapServer/4/query"
 params = {
     "where": "CTY_CODE='67'",
@@ -667,6 +1623,7 @@ params = {
     "f": "geojson"
 }
 # %%
+
 # state_roads = gpd.read_file(f"{url}?" + "&".join(f"{k}={v}" for k,v in params.items()))
 # state_roads.to_file("raw-data/PA State Roads/state_roads_philly.geojson", driver="geoJSON")
 
@@ -687,7 +1644,7 @@ print(state_roads.columns.tolist())
 # % 'PVMNT_IND', 'IRI_YEAR', 'OPI_YEAR', 'IRI_RATING', 'OPI_RATING', 'SURFACE_YE', 'SEGMENT_MI', 'LANE_MILES', 'CYCLE_MAIN', 'Shape_Leng', 'LEN', 'BIKE_LANE', 'geometry']
 
 state_roads_pts = state_roads.copy()
-state_roads_pts.geometry = state_roads.geometry.interpolate(0.5, normalized=True)
+state_roads_pts.geometry = get_midpoint(state_roads)
 
 matched_state = gpd.sjoin_nearest(
     centerlines_pts,
@@ -715,66 +1672,7 @@ center_line_master_speeds["maxspeed"] = center_line_master_speeds["class"].map(s
 center_line_master_speeds.head()
 center_line_master_speeds["maxspeed"].value_counts(dropna=False)
 
-# %% [markdown]
-# # Tree Canopy Data
-
-# %%
-# Tree canopy data - CRS = 2272
-# according to the site - 1 is tree canopy
-with rasterio.open("raw-data/Phila Land Cover Raster/PPR_LandCover_2018.gdb") as src:
-    print(src.crs) # 2722
-    print(src.bounds)
-    print(src.res) # 0.5 x 0.5
-    print(src.shape)
-    print(src.transform)
-    print(src.tags())
-     
-    # downsample in out_shape
-    data = src.read(1, out_shape=(src.height // 25, src.width // 25))
-
-    # mask to canopy only
-    canopy = np.where(data == 1, 1, 0) # why no y?
-
-    plt.figure(figsize=(10,10))
-    plt.imshow(canopy, cmap="Greens")
-    plt.title("2018 TC PH")
-    plt.axis("off")
-    
-    plt.show()
-
-    
-
-
-# %%
-
-
-# %%
-print("Elevation: \n")
-with rasterio.open("raw-data/Phila Elevation Raster/Philadelphia_dem_3ft_2022.tif") as src:
-    data = src.read(1, out_shape=(src.height // 10, src.width // 10))
-    nodata = src.nodata
-
-data_masked = np.ma.masked_equal(data, nodata)
-
-plt.figure(figsize=(10,10))
-im = plt.imshow(data_masked, cmap="terrain")
-plt.colorbar(im, label="Elevation (ft)")
-plt.axis("off")
-plt.show()
-# TODO NEED TO CLIP!
-    
-
-# %%
-
-
-# %%
-print("PPD Street Trees ")
-tree_data = gpd.read_file("raw-data/Phila Street Trees/ppr_tree_inventory_2024.geojson")
-print(tree_data.crs) # 4326
-tree_data.plot(cmap="Greens", ax=None, figsize=(20,20))
-
-
-
+#%%
 # %%
 print("Census info: ")
 
@@ -790,7 +1688,7 @@ print(len(block_groups))
 block_groups.head(10)
 print(block_groups.crs) # 4269
 
-cen = census.Census("854998ba461ae3716c5c85301a31988051bea13e")
+cen = census.Census(os.environ["CENSUS_API_KEY"])
 
 tract_data = cen.acs5.state_county_tract(
     fields=("NAME",
@@ -833,7 +1731,7 @@ blockgroup_data = cen.acs5.state_county_blockgroup(
     state_fips='42',
     county_fips="101",
     blockgroup="*",
-    year=2024
+    year=2024,
 )
 
 blockgroup_data_frame = pd.DataFrame(blockgroup_data)
@@ -841,7 +1739,14 @@ print("Blockgfroup: \n")
 
 print(blockgroup_data_frame.head(10))
 
+# %%
+# now get the geom
+bg_geom: gpd.GeoDataFrame = pygris.block_groups(state="PA", county="Philadelphia", year=2024)
+bg_geom.plot()
 
+# %%
+
+bg_geom_2272 = to_2272_file(bg_geom, "transformed-data/Census/just-geom.geojson")
 
 
 # %%
@@ -851,3 +1756,320 @@ land_usage = gpd.read_file("raw-data/Philly Land Use/Land_Use.geojson")
 print(land_usage.crs) # 4326
 
 
+
+# %% [markdown]
+# # Tree Canopy Data
+
+# %%
+# Tree canopy data - CRS = 2272
+# according to the site - 1 is tree canopy
+with rasterio.open("raw-data/Phila Land Cover Raster/PPR_LandCover_2018.gdb") as src:
+    print(src.crs) # 2722
+    print(src.bounds)
+    print(src.res) # 0.5 x 0.5
+    print(src.shape)
+    print(src.transform)
+    print(src.tags())
+    print(src.nodata)
+     
+    # downsample in out_shape
+    data = src.read(1, out_shape=(src.height // 25, src.width // 25))
+
+    # mask to canopy only
+    canopy = np.where(data == 1, 1, 0) # why no y?
+
+    plt.figure(figsize=(10,10))
+    plt.imshow(canopy, cmap="Greens")
+    plt.title("2018 TC PH")
+    plt.axis("off")
+    
+    plt.show()
+    
+#%%
+
+# takes a while! we have stats written below
+# tc_center_lines_buf = center_line_master_2722.copy()
+# tc_center_lines_buf.geometry = center_line_master_2722.geometry.buffer(5)
+
+# stats = zonal_stats(
+#     tc_center_lines_buf.geometry,
+#     "raw-data/Phila Land Cover Raster/PPR_LandCover_2018.gdb",
+#     categorical=True,
+#     stats=["mean", "min", "max", "range", "median", "std", "percentile_10", "percentile_90", "count"], # these stats are actually largely nonsense :) categorical
+#     nodata=None,
+# )
+
+    
+
+
+# %%
+# print(stats)
+# stats_df = pd.DataFrame(stats)
+# stats_df.to_parquet("transformed-data/Phila Land Cover Raster/canopy_stats.parquet")
+stats_df = pd.read_parquet("transformed-data/Phila Land Cover Raster/canopy_stats.parquet")
+print(stats_df.columns.tolist())
+
+#%%
+stats_df = stats_df.fillna(0)
+# DOUBLE CHECK!!! Some 1.0s
+stats_df['total'] = stats_df[['1', '2', '3', '5', '6', '7']].sum(axis=1)
+stats_df['canopy_pct'] = stats_df['1'] / stats_df['total']
+
+center_line_master_2722['canopy_pct'] = stats_df['canopy_pct'].values
+
+
+# %%
+print("Elevation: \n")
+boundary_2272 = bg_geom.to_crs("EPSG:2272")
+boundary_union = boundary_2272.geometry.union_all()  # single polygon from all block groups
+elevation_raster_path = "raw-data/Phila Elevation Raster/Philadelphia_dem_3ft_2022.tif"
+
+with rasterio.open(elevation_raster_path) as src:
+    # Force CRS to just the horizontal 2272 
+    # (TODO: Circle back and see if this is necessary, more likely the nodota float32 min is the culprit)
+    out_image, out_transform = mask(
+        src,
+        [boundary_union],
+        crop=True,
+        nodata=src.nodata
+    )
+    out_meta = src.meta.copy()
+    out_meta.update({
+        "height": out_image.shape[1],
+        "width": out_image.shape[2],
+        "transform": out_transform,
+        "crs": rasterio.CRS.from_epsg(2272)  # explicit 2D CRS
+    })
+
+# %%
+
+# initially, clipping was returning white...
+
+with rasterio.open(elevation_raster_path) as src:
+    print(src.nodata) # -3.4028234663852886e+38
+
+# we need to mask out that nodata value (float32's min value)
+    
+
+#%%
+data = np.ma.masked_less(out_image[0, ::10, ::10], -1e30) 
+print("doen")
+
+plt.figure(figsize=(10, 10))
+plt.imshow(data, cmap=cmo.deep) # type: ignore
+plt.colorbar(label="Elevation (ft)")
+plt.axis("off")
+plt.show()
+
+# now the clip looks good 
+
+#%% [markdown]
+# ### Time to associate raster elevation change to centerline segments
+
+# a quick and naive first approach:
+# get a point at the start end end of each segment and sample the elevation in the raster
+#%%
+raster_center_line = center_line_master_2722.copy()
+raster_center_line.head()
+
+raster_center_line["startpoint"] = raster_center_line.geometry.interpolate(0, normalized=True)
+raster_center_line["midpoint"] = get_midpoint(raster_center_line)
+raster_center_line["endpoint"] = raster_center_line.geometry.interpolate(1, normalized=True)
+
+raster_center_line.head()
+
+
+with rasterio.open(elevation_raster_path) as src:
+    def sample_elevation(point):
+        if point.is_empty:
+            return None
+        val = next(src.sample([(point.x, point.y)]))[0]
+        return val if val > -1e30 else None
+    
+    raster_center_line['start_elev'] = raster_center_line.geometry.apply(
+        lambda g: sample_elevation(Point(g.coords[0]))
+    )
+    raster_center_line['end_elev'] = raster_center_line.geometry.apply(
+        lambda g: sample_elevation(Point(g.coords[-1]))
+    )
+
+#%% 
+
+# since we're getting some crazy grade levels (> 59) we're clearly sampling some weird elevation
+# we can probably handle with some zonal analysis, but for now, we can get rid of the short segments
+# and see if that helps
+
+raster_center_line_above_150 = raster_center_line[raster_center_line["length"] > 150]
+   
+raster_center_line_above_150["ele_diff"] = abs(raster_center_line_above_150["start_elev"] - raster_center_line_above_150["end_elev"])
+raster_center_line_above_150["grade"] = raster_center_line_above_150["ele_diff"] / raster_center_line_above_150["length"]
+ #%%
+
+# this is actually not bad as a first attempt
+# the data is in the ballpark with port royal and bells mills in the top 5
+raster_center_line_above_150.head()
+raster_center_line_above_150.sort_values("ele_diff", ascending=False).head()
+raster_center_line_above_150.sort_values("grade", ascending=False).head()
+
+#%%
+# let's see how it plots
+raster_center_line.plot(column="ele_diff",  cmap='viridis', legend=True,
+    figsize=(12, 12),
+    linewidth=0.5,
+    vmin=0,
+    vmax=raster_center_line['ele_diff'].quantile(0.95))
+
+# and the grade
+
+raster_center_line.plot(column="grade",  cmap='magma', legend=True,
+    figsize=(12, 12),
+    linewidth=0.5,
+    vmin=0,
+    vmax=raster_center_line['grade'].quantile(0.95))
+
+
+
+# grades are a bit funky... upwards of 60%
+# so onward to zonal
+
+#%%
+segments_buffered = center_line_master_2722.copy()
+segments_buffered.geometry = center_line_master_2722.geometry.buffer(5)
+
+stats = zonal_stats(
+    segments_buffered.geometry,
+    elevation_raster_path,
+    stats=["mean", "min", "max", "range", "median", "std", "percentile_10", "percentile_90", "count"],
+    nodata=-3.4028235e+38
+)
+
+#%%
+stats_df = pd.DataFrame(stats)
+
+#%%
+center_line_master_2722['elev_mean'] = stats_df['mean']
+center_line_master_2722['elev_min'] = stats_df['min']
+center_line_master_2722['elev_max'] = stats_df['max']
+center_line_master_2722['elev_std'] = stats_df['std']
+center_line_master_2722['percentile_10'] = stats_df['percentile_10']
+center_line_master_2722['percentile_90'] = stats_df['percentile_90']
+center_line_master_2722['elev_range'] = center_line_master_2722['elev_max'] - center_line_master_2722['elev_min']
+center_line_master_2722['grade_buffered'] = center_line_master_2722['elev_range'] / center_line_master_2722['length']
+center_line_master_2722["percentile_90-10"] = center_line_master_2722['percentile_90'] - center_line_master_2722['percentile_10']
+center_line_master_2722['grade_buffered_90_10'] = center_line_master_2722['percentile_90-10'] / center_line_master_2722['length']
+center_line_master_2722.head(10)
+center_line_master_2722["elev_range"].describe()
+center_line_master_2722["elev_mean"].describe()
+center_line_master_2722["elev_std"].describe() # for the most part this looks good - a std deviation 2.14 at 0.75
+center_line_master_2722['grade_buffered'].describe()
+center_line_master_2722.sort_values("percentile_90-10", ascending=False)
+
+
+## we're not having great results this way..... in fact our naive approah was better... 
+## funky ranges whether min max or inter-percentile... could tweak percentiles more,  but we also have tons of nans, and i dont htink we had that with the smaple by point.
+## so let's try sampling a lot of points on the centerline.
+## if that doesnt work.. its back to the drawing board
+
+#%%
+def sample_along_line(line: LineString, src, n: int = 10) -> list[float]:
+    points = [line.interpolate(i / (n - 1), normalized=True) for i in range(n)]
+    elevs = []
+    for p in points:
+        val = next(src.sample([(p.x, p.y)]))[0]
+        if val > -1e30:
+            elevs.append(float(val))
+    return elevs
+
+with rasterio.open(elevation_raster_path) as src:
+    def get_grade(line):
+        elevs = sample_along_line(line, src, n=10)
+        if len(elevs) < 2:
+            return np.nan, np.nan
+        return max(elevs) - min(elevs), np.std(elevs)
+    
+    results = center_line_master_2722.geometry.apply(get_grade)
+
+center_line_master_2722['elev_range_sampled'] = results.apply(lambda x: x[0])
+center_line_master_2722['elev_std_sampled'] = results.apply(lambda x: x[1])
+center_line_master_2722['grade_sampled'] = center_line_master_2722['elev_range_sampled'] / center_line_master_2722['length']
+
+center_line_master_2722['grade_log'] = np.log1p(center_line_master_2722['grade_sampled'])
+#%%
+center_line_master_2722.plot(
+    column='grade_sampled',
+    cmap='magma',
+    legend=True,
+    figsize=(12, 12),
+    linewidth=0.8,
+    vmax=center_line_master_2722['grade_sampled'].quantile(0.95)
+)
+
+#%%
+
+suspicious_ish = center_line_master_2722[center_line_master_2722["grade_sampled"] > 0.1]
+
+fig, ax = plt.subplots(figsize=(12, 12))
+
+# City boundary as background
+bg_geom_2272.boundary.plot(ax=ax, color='lightgray', linewidth=1)
+
+suspicious_ish.plot(
+    ax=ax,
+    column='grade_sampled',
+    cmap='magma',
+    legend=True,
+    figsize=(12, 12),
+    linewidth=1.8,
+    vmax=suspicious_ish['grade_sampled'].quantile(0.95)
+)
+
+plt.show()
+
+suspicious_ish.plot(
+
+    column='grade_sampled',
+    cmap='magma',
+    legend=True,
+    figsize=(12, 12),
+    linewidth=0.8,
+    vmax=suspicious_ish['grade_sampled'].quantile(0.95)
+)
+# i see a bunch of suspicious points... I need the city overlay though to tell more
+
+# %%
+print("PPD Street Trees ")
+tree_data = gpd.read_file("raw-data/Phila Street Trees/ppr_tree_inventory_2024.geojson")
+print(tree_data.crs) # 4326
+tree_data.plot(cmap="Greens", ax=None, figsize=(20,20))
+
+tree_data_2272 = to_2272_file(tree_data, "transformed-data/Phila Street Trees/ppr_tree_inventory_2024.geojson")
+
+#%%
+tree_data_2272.head(10)
+
+tree_line = center_line_master_2722.copy()
+
+tree_center_joined = tree_line.sjoin_nearest(tree_data_2272)
+
+tree_center_joined.head(10)
+
+print(len(tree_line))
+print(len(tree_center_joined))
+
+
+## again, naive approch... we'd rather have them within a certain range:
+# Buffer segments to capture trees along them
+segments_buffered = tree_line.copy()
+segments_buffered.geometry = tree_line.geometry.buffer(30)  # ~30ft either side, seems to work well - can investigate further.
+
+# Spatial join - each tree gets matched to all segments whose buffer contains it
+joined = gpd.sjoin(tree_data_2272, segments_buffered[['seg_id', 'geometry']], how='inner', predicate='intersects')
+
+# Count trees per segment
+tree_counts = joined.groupby('seg_id').size().reset_index(name='tree_count')
+
+# Merge back to centerlines
+centerlines = tree_line.merge(tree_counts, on='seg_id', how='left')
+centerlines['tree_count'] = centerlines['tree_count'].fillna(0).astype(int)
+
+# %%

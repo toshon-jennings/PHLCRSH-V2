@@ -54,11 +54,16 @@
 - [ ] Tree Canopy Raster — NLCD 30m or Philly-specific canopy assessment
   - [x] Obtain (PPR_LandCover_2018 - not sure where i got it check work computer)
   - [x] Confirm CRS and resolution
+  - [ ] run zonal stats and add to centerline data
 - [ ] DEM / Elevation — USGS lidar-derived
   - [x] obtain https://noaa-nos-coastal-lidar-pds.s3.amazonaws.com/dem/PA_Phil_DEM_2022_9849/index.html
-  - [ ] Plan slope computation per road segment 
-- [ ] Parks Trees Planted.
+  - [ ] Plan slope computation per centerline segment
+    - [x] I think that if we take the max-min on the centerline thats a start
+    - [x] grade
+    - [ ] handle messy results
+- [x] Parks Trees Planted.
   - [x] Obtain
+  - [x] join to centerline
 
 ### BONUS
 - [ ] Sunlight? Direction? 

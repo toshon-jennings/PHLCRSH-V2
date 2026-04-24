@@ -3,32 +3,42 @@
 - [x] obtain data - done
 
 W April 22
-- [-] go through understand data
-- [-] prep (CRS, spatial joins)
-- [-] basic maps
+- [x] go through understand data
+- [x] prep (CRS, spatial joins)
+- [x] basic maps
 
 T
-- some raster data work
-- double back and finish above 
-    - basic maps need to be non explore and exportable
-- check aggregation on joins
-- little raster data
+- [x] some raster data work
+- [x] double back and finish above 
 
 
 F
+- [x] roadwidth - calculate and add to table (9:30-2pm)
+    - this is taking a while to process.
+    - but should be in the final steps!
+    - compare to state wide roads (we tried, but faltered and notred)
 
+- [ ] more raster join with normalization (2pm-3pm)
+    - [ ] finish the elevation grading
+        - [ ] handle case by case suspicious - see if you can try to group them and detect others
+    - [ ] get tree cover
+        - [x] have inital
+        - [ ] but some 1.0s and need to check the data
+
+- Build analytical table (3-4)
+    - [ ] I'm sure tons to fill in gap and clean
+
+- Analysis and Mapping (4 - 7)
 - Need to start making a call on what you can show for the presentation
-
-- Build analytical table
-- more raster join with normalization
-- roadwidth 
-
+ - [ ] This is already started, actually. Outlining. Much more details to add.
 
 S
-- Analysis and Mapping
+- Finish Analysis and Mapping (9-1)
+    - basic maps need to be non explore and exportable
+
+- call here on working on stat shit which i'd strongly advise to start
+- Polish and finish for presentation
 
 SN
-- Polish and finish for presentation
 - Present in class
 - Final polish
-
