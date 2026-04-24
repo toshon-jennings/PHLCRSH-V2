@@ -33,3 +33,12 @@ Check out some of these suspicious grades:
 ![alt text](sus-grade-over-bridge.png)
 
 ![Vine Street Grades](vinest.png)
+
+
+### AI Honest Policy
+
+- I took an honest first approach at spatial analysis. 
+- Relied on AI as lookup, never in code autocomplete or chat.
+- then I ould ask for preferred methods, and would copy the methods for the most part, adapting as necessary. 
+- I used it to clean up my code structure after I was done with analysis and had my final table. It was great for that. I directed it how I'd like things separated. This allowed me to focus on the raw data gathering and trasformation rather than worry about spending hours molding things.
+- I think this is a balanced approach.
