@@ -140,8 +140,8 @@ crash_cor_data = crash_data[corr_cols].copy()
 corr = crash_cor_data.corr()
 
 # %%
-
-plt.figure(figsize=(25, 25))
+fig, ax = plt.subplots(figsize=(25, 25), facecolor="#0a0a0a")
+ax.set_facecolor("#0a0a0a")
 sns.heatmap(
     corr,
     annot=True,
@@ -152,9 +152,21 @@ sns.heatmap(
     vmax=1,
     square=True,
     cbar_kws={"shrink": 0.8},
+    ax=ax,
 )
-plt.title("Correlation Matrix")
-plt.tight_layout()
+# Title
+ax.set_title("Correlation Matrix", color="white", fontsize=20, pad=20)
+
+# Tick labels (the variable names on x and y axes)
+ax.tick_params(colors="white", labelsize=12)
+plt.setp(ax.get_xticklabels(), color="white")
+plt.setp(ax.get_yticklabels(), color="white")
+
+# Colorbar tick labels
+cbar = ax.collections[0].colorbar
+cbar.ax.tick_params(colors="white")  # type: ignore
+cbar.outline.set_edgecolor("white")  # type: ignore
+
 plt.tight_layout()
 plt.savefig(
     "presentation_assets/correlat.png",
@@ -162,6 +174,7 @@ plt.savefig(
     bbox_inches="tight",
     facecolor="#0a0a0a",
 )
+plt.show()
 plt.show()
 
 
@@ -282,7 +295,7 @@ crash_data_prepping["log_grade"] = np.log1p(crash_data_prepping["grade_range_smo
 # It's time to run some regression models.
 # Since we're dealing with crash counts, and not continuous data, regular ol OLS isn't the best approach.
 # Here I've done a bit of research and found that the two most common regressions for count distributions are
-# Poisson and negative binomial regression. Poisson assumes constant variance and since crash data is sparse, certainly not spatially constantly (TODO: show or have map to show)
+# Poisson and s binomial regression. Poisson assumes constant variance and since crash data is sparse, certainly not spatially constantly (TODO: show or have map to show)
 # we reach for negative binomial regression.
 
 
