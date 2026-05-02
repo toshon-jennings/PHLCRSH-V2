@@ -1,9 +1,8 @@
-import { initDB, query } from './db';
-import { initMap, } from './map';
+import './styles.css';
+import { initDB } from './db';
+import { initMap } from './map';
 
 async function main() {
-  const statusEl = document.getElementById('status')!;
-
   console.log('[phlcrsh] Initializing DuckDB…');
   await initDB();
   console.log('[phlcrsh] DuckDB ready. Loading map…');
