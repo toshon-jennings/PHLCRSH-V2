@@ -14,6 +14,7 @@
         <aside id="sidebar" class="mode-idle">
           <div class="sidebar-header">
             <span class="sidebar-title">Philadelphia Crash Risk</span>
+            <button class="about-open-button" id="about-open" type="button">About</button>
             <button class="panel-collapse-button" id="sidebar-toggle" type="button"
                     aria-label="Collapse sidebar" aria-expanded="true" aria-controls="sidebar-content">
               <span class="panel-collapse-icon" aria-hidden="true">‹</span>
@@ -147,6 +148,20 @@
         </div>
 
       </div>
+      <section class="about-overlay" id="about-overlay" aria-hidden="true">
+        <article class="about-panel" role="dialog" aria-modal="true" aria-labelledby="about-title">
+          <div class="about-panel-header">
+            <div>
+              <div class="about-eyebrow">Project notes</div>
+              <h2 id="about-title">About & Data</h2>
+            </div>
+            <button class="panel-collapse-button" id="about-close" type="button" aria-label="Close about panel">
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          <div class="about-content" id="about-content"></div>
+        </article>
+      </section>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
