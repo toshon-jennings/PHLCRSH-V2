@@ -50,6 +50,11 @@ if __name__ == "__main__":
             "data/philly_segments.parquet",
             "application/vnd.apache.parquet",
         ),
+        (
+            "philly_block_groups.parquet",
+            "data/philly_block_groups.parquet",
+            "application/vnd.apache.parquet",
+        ),
     ]
 
     for local, remote, ctype in uploads:

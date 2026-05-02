@@ -7,6 +7,19 @@ df = gpd.read_file(
     layer="segments",
 )
 
+# --- Block groups parquet ---
+bg_geom = gpd.read_file("raw-data/Census/phila_block_groups_2024_4269.geojson")[["GEOID", "geometry"]]
+bg_vals = (
+    df[["GEOID", "population", "median_income"]]
+    .drop_duplicates("GEOID")
+    .dropna(subset=["GEOID"])
+)
+bg_vals["median_income"] = bg_vals["median_income"].where(bg_vals["median_income"] >= 0, other=None)
+bg_export = bg_geom.merge(bg_vals, on="GEOID", how="inner")
+bg_export.to_parquet("philly_block_groups.parquet", compression="zstd")
+print(f"Exported {len(bg_export):,} block groups")
+print(f"Block groups file size: {os.path.getsize('philly_block_groups.parquet') / 1e6:.1f} MB")
+
 # Reproject to 4326 for web mapping (MapLibre/Leaflet expect WGS84)
 df_4326 = df.to_crs(4326)
 

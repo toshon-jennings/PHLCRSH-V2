@@ -1,15 +1,5 @@
-import { initDB } from './db';
-import { ensureDatasets } from './opfs';
-import { initMap, addTableLayer } from './map';
-
-const DATASETS = [
-  {
-    table: 'crashes',
-    url: '/data/crashes.parquet',
-  },
-  // Add more datasets here as the pipeline produces them:
-  // { table: 'segments', url: '/data/segments.parquet', geometryColumn: 'geometry' },
-];
+import { initDB, query } from './db';
+import { initMap, } from './map';
 
 async function main() {
   const statusEl = document.getElementById('status')!;
@@ -18,15 +8,11 @@ async function main() {
   await initDB();
   statusEl.textContent = 'DuckDB ready. Loading datasets…';
 
-  await ensureDatasets(DATASETS);
-  statusEl.textContent = 'Data loaded. Rendering map…';
+  // await ensureDatasets(DATASETS);
+  // statusEl.textContent = 'Data loaded. Rendering map…';
 
-  const map = initMap('map');
+  initMap('map');
 
-  map.on('load', async () => {
-    await addTableLayer(map, 'crashes', 'crashes-layer', undefined, 'circle');
-    statusEl.textContent = 'Ready.';
-  });
 }
 
 main().catch((err) => {
