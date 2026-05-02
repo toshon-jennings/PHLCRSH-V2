@@ -92,6 +92,7 @@ export async function initMap(container: string) {
   });
 
   const legendColorClass = (color: string) => `legend-color-${color.replace('#', '').toLowerCase()}`;
+  const legendColorStyle = (color: string) => `style="background:${color}"`;
 
   function renderLegend(container: HTMLElement, layerId: string | null) {
     if (!layerId || !LEGENDS[layerId]) {
@@ -113,15 +114,14 @@ export async function initMap(container: string) {
       const [tl, tr, bl, br] = legend.cells;
       body = `
         <div class="biv-legend">
-          <span class="biv-y-hi">${legend.yHi}</span>
+          <span class="biv-y-head"><span>${legend.yLabel}</span><strong>${legend.yHi}</strong></span>
           <div class="biv-row">
-            <div class="${legendColorClass(tl)}"></div><div class="${legendColorClass(tr)}"></div>
+            <div ${legendColorStyle(tl)}></div><div ${legendColorStyle(tr)}></div>
           </div>
           <span class="biv-y-lo">${legend.yLo}</span>
           <div class="biv-row">
-            <div class="${legendColorClass(bl)}"></div><div class="${legendColorClass(br)}"></div>
+            <div ${legendColorStyle(bl)}></div><div ${legendColorStyle(br)}></div>
           </div>
-          <span class="biv-y-axis">${legend.yLabel}</span>
           <div class="biv-x-axis">
             <span>${legend.xLo}</span>
             <span class="biv-x-name">${legend.xLabel}</span>

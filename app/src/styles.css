@@ -44,8 +44,8 @@
   --swatch-grade-start: #c994c7;
   --swatch-grade-end: #7a0177;
   --swatch-neutral: #d9d9d9;
-  --swatch-canopy-width-end: #1a9850;
-  --swatch-grade-speed-end: #d73027;
+  --swatch-canopy-width-end: #137a4a;
+  --swatch-grade-speed-end: #b91c1c;
   --swatch-population-start: #fdbb84;
   --swatch-population-end: #7f0000;
   --swatch-income-start: #6baed6;
@@ -895,40 +895,56 @@ input.outlier-slider {
 
 .biv-legend {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 42px minmax(112px, 1fr);
   align-items: center;
-  gap: var(--space-2) var(--space-6);
+  gap: var(--space-3) var(--space-6);
   color: var(--color-secondary);
   font-size: var(--text-xs);
 }
 
 .biv-row {
   display: grid;
+  grid-column: 2;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-2);
-  height: var(--bivariate-row-height);
+  height: calc(var(--bivariate-row-height) + 3px);
 }
 
 .biv-row > div {
   border-radius: var(--radius-xs);
 }
 
-.biv-y-hi,
+.biv-y-head,
 .biv-y-lo {
+  grid-column: 1;
   color: var(--color-secondary);
   font-size: var(--text-2xs);
   text-align: right;
 }
 
-.biv-y-axis {
+.biv-y-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.biv-y-head span {
   color: var(--color-quaternary);
   font-size: var(--text-2xs);
   font-weight: 600;
-  text-align: right;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.biv-y-head strong {
+  color: var(--color-secondary);
+  font-size: var(--text-2xs);
+  font-weight: 500;
 }
 
 .biv-x-axis {
   display: grid;
+  grid-column: 2;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   color: var(--color-secondary);
@@ -939,6 +955,7 @@ input.outlier-slider {
   color: var(--color-quaternary);
   font-weight: 600;
   text-align: center;
+  text-transform: uppercase;
 }
 
 .outlier-check {

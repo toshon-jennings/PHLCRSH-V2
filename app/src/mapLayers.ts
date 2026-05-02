@@ -81,7 +81,7 @@ export const LEGENDS: Record<string, Legend> = {
     yLabel: 'width',
     yLo: '<35ft',
     yHi: '≥35ft',
-    cells: ['#fc8d59', '#1a9850', '#d9d9d9', '#91cf60'],
+    cells: ['#f59e7d', '#137a4a', '#d5d8d2', '#9bd880'],
   },
   'inter-grade-speed': {
     kind: 'bivariate',
@@ -91,7 +91,7 @@ export const LEGENDS: Record<string, Legend> = {
     yLabel: 'grade',
     yLo: 'flat',
     yHi: 'steep',
-    cells: ['#fee08b', '#d73027', '#d9d9d9', '#fc8d59'],
+    cells: ['#f2c66d', '#b91c1c', '#d7d9dc', '#f29a76'],
   },
 };
 
@@ -303,11 +303,11 @@ export function addMapSourcesAndLayers(
     paint: {
       'line-color': [
         'case',
-        ['all', ['<', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['<', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#d9d9d9',
-        ['all', ['<', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['>=', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#91cf60',
-        ['all', ['>=', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['<', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#fc8d59',
-        ['all', ['>=', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['>=', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#1a9850',
-        '#d9d9d9',
+        ['all', ['<', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['<', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#d5d8d2',
+        ['all', ['<', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['>=', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#9bd880',
+        ['all', ['>=', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['<', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#f59e7d',
+        ['all', ['>=', ['coalesce', ['get', 'cartway_width_ft'], 0], 35], ['>=', ['coalesce', ['get', 'canopy_pct'], 0], 0.1]], '#137a4a',
+        '#d5d8d2',
       ],
       'line-width': [
         'step', ['coalesce', ['get', 'cartway_width_ft'], 0],
@@ -324,11 +324,11 @@ export function addMapSourcesAndLayers(
     paint: {
       'line-color': [
         'case',
-        ['all', ['<', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['<', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#d9d9d9',
-        ['all', ['>=', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['<', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#fee08b',
-        ['all', ['<', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['>=', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#fc8d59',
-        ['all', ['>=', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['>=', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#d73027',
-        '#d9d9d9',
+        ['all', ['<', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['<', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#d7d9dc',
+        ['all', ['>=', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['<', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#f2c66d',
+        ['all', ['<', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['>=', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#f29a76',
+        ['all', ['>=', ['coalesce', ['get', 'grade_range_smooth'], 0], 0.02], ['>=', ['coalesce', ['get', 'maxspeed_final'], 0], 35]], '#b91c1c',
+        '#d7d9dc',
       ],
       'line-width': [
         'step', ['coalesce', ['get', 'cartway_width_ft'], 0],
