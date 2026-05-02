@@ -27,6 +27,13 @@ if (typeof window === 'undefined') {
             return;
         }
 
+        // Don't intercept cross-origin data fetches — let the browser handle
+        // CORS natively so adding response headers doesn't break them.
+        const url = new URL(r.url);
+        if (url.origin !== self.location.origin) {
+            return;
+        }
+
         const request = (coepCredentialless && r.mode === "no-cors")
             ? new Request(r, {
                 credentials: "omit",
@@ -54,7 +61,10 @@ if (typeof window === 'undefined') {
                         headers: newHeaders,
                     });
                 })
-                .catch((e) => console.error(e))
+                .catch((e) => {
+                    console.error("[coi-serviceworker] fetch failed", e);
+                    return new Response("Service worker fetch failed", { status: 502 });
+                })
         );
     });
 
