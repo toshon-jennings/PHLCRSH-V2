@@ -286,7 +286,7 @@ export async function initMap(container: string) {
     source: 'block-groups',
     paint: {
       'fill-color': [
-        'case', ['==', ['get', 'median_income'], null], '#e8e8e8',
+        'case', ['==', ['get', 'median_income'], null as any], '#e8e8e8',
         ['step', ['get', 'median_income'],
           '#f7fbff',
           25000, '#c6dbef',
@@ -778,8 +778,8 @@ WHERE GEOID = '${geoid}'`;
 
   function setupOutlierSlider() {
     const slider = document.getElementById('outlier-threshold-slider') as HTMLInputElement | null;
-    const valLabel = document.getElementById('slider-val');
-    const countEl  = document.getElementById('outlier-count');
+    const valLabel = document.getElementById('slider-val') as HTMLElement;
+    const countEl  = document.getElementById('outlier-count') as HTMLElement;
     if (!slider || !valLabel || !countEl) return;
 
     let timer: ReturnType<typeof setTimeout>;
