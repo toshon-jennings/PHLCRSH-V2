@@ -9,6 +9,7 @@ import {
 import {
   loadBlockGroupFeatures,
   loadBlockGroupPeerComparison,
+  loadPhiladelphiaBoundary,
   loadSegmentFeatures,
   type SegmentProperties,
 } from './mapQueries';
@@ -49,11 +50,12 @@ export async function initMap(container: string) {
 
   await map.once('load');
 
-  const [segmentFeatures, blockGroupFeatures] = await Promise.all([
+  const [segmentFeatures, blockGroupFeatures, philadelphiaBoundary] = await Promise.all([
     loadSegmentFeatures(),
     loadBlockGroupFeatures(),
+    loadPhiladelphiaBoundary(),
   ]);
-  addMapSourcesAndLayers(map, segmentFeatures, blockGroupFeatures);
+  addMapSourcesAndLayers(map, segmentFeatures, blockGroupFeatures, philadelphiaBoundary);
 
   let hoveredId: number | string | null = null;
   let pinnedSegId: number | string | null = null;

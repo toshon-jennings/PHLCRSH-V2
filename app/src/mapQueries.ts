@@ -32,6 +32,15 @@ export type BlockGroupFeature = {
   geometry: any;
 };
 
+export type BoundaryFeatureCollection = {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties: Record<string, unknown>;
+    geometry: any;
+  }>;
+};
+
 export type PeerComparison = {
   sql: string;
   peerN: number;
@@ -100,6 +109,25 @@ export async function loadBlockGroupFeatures(): Promise<BlockGroupFeature[]> {
     },
     geometry: JSON.parse(r.geojson),
   }));
+}
+
+export async function loadPhiladelphiaBoundary(): Promise<BoundaryFeatureCollection> {
+  const result = await query(`
+    SELECT ST_AsGeoJSON(ST_Boundary(ST_CoverageUnion_Agg(geometry))) AS geojson
+    FROM block_groups
+  `);
+  const row = result.toArray()[0] as any;
+
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Philadelphia' },
+        geometry: JSON.parse(row.geojson),
+      },
+    ],
+  };
 }
 
 export async function loadBlockGroupPeerComparison(p: SegmentProperties): Promise<PeerComparison | null> {

@@ -1,5 +1,5 @@
 import type maplibregl from 'maplibre-gl';
-import type { BlockGroupFeature, SegmentFeature } from './mapQueries';
+import type { BlockGroupFeature, BoundaryFeatureCollection, SegmentFeature } from './mapQueries';
 
 export const GRADE_OUTLIER_THRESHOLD = 0.15;
 
@@ -99,7 +99,73 @@ export function addMapSourcesAndLayers(
   map: maplibregl.Map,
   segmentFeatures: SegmentFeature[],
   blockGroupFeatures: BlockGroupFeature[],
+  philadelphiaBoundary: BoundaryFeatureCollection,
 ) {
+  map.addSource('block-groups', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: blockGroupFeatures } as any,
+  });
+
+  map.addLayer({
+    id: 'population',
+    type: 'fill',
+    source: 'block-groups',
+    paint: {
+      'fill-color': [
+        'case', ['==', ['get', 'population'], null as any], '#fff7ec',
+        ['step', ['coalesce', ['get', 'population'], 0],
+          '#fff7ec',
+          500, '#fdd49e',
+          1000, '#fdbb84',
+          1500, '#fc8d59',
+          2500, '#d7301f',
+          3500, '#7f0000',
+        ],
+      ],
+      'fill-opacity': ['case', ['==', ['get', 'population'], null as any], 0, 0.55],
+    },
+  });
+
+  map.addLayer({
+    id: 'median-income',
+    type: 'fill',
+    source: 'block-groups',
+    paint: {
+      'fill-color': [
+        'case', ['==', ['get', 'median_income'], null as any], '#e8e8e8',
+        ['step', ['coalesce', ['get', 'median_income'], 0],
+          '#f7fbff',
+          25000, '#c6dbef',
+          50000, '#6baed6',
+          75000, '#2171b5',
+          125000, '#08306b',
+        ],
+      ],
+      'fill-opacity': ['case', ['==', ['get', 'median_income'], null as any], 0, 0.55],
+    },
+  });
+
+  map.addSource('philadelphia-boundary', {
+    type: 'geojson',
+    data: philadelphiaBoundary as any,
+  });
+
+  map.addLayer({
+    id: 'philadelphia-boundary',
+    type: 'line',
+    source: 'philadelphia-boundary',
+    paint: {
+      'line-color': '#20242c',
+      'line-width': [
+        'interpolate', ['linear'], ['zoom'],
+        9, 0.75,
+        12, 1.15,
+        15, 1.8,
+      ],
+      'line-opacity': 0.55,
+    },
+  });
+
   map.addSource('segments', {
     type: 'geojson',
     data: { type: 'FeatureCollection', features: segmentFeatures } as any,
@@ -268,48 +334,6 @@ export function addMapSourcesAndLayers(
         'step', ['get', 'cartway_width_ft'],
         1, 5, 1.5, 10, 2, 50, 4, 100, 6,
       ],
-    },
-  });
-
-  map.addSource('block-groups', {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: blockGroupFeatures } as any,
-  });
-
-  map.addLayer({
-    id: 'population',
-    type: 'fill',
-    source: 'block-groups',
-    paint: {
-      'fill-color': [
-        'step', ['get', 'population'],
-        '#fff7ec',
-        500, '#fdd49e',
-        1000, '#fdbb84',
-        1500, '#fc8d59',
-        2500, '#d7301f',
-        3500, '#7f0000',
-      ],
-      'fill-opacity': 0.55,
-    },
-  });
-
-  map.addLayer({
-    id: 'median-income',
-    type: 'fill',
-    source: 'block-groups',
-    paint: {
-      'fill-color': [
-        'case', ['==', ['get', 'median_income'], null as any], '#e8e8e8',
-        ['step', ['get', 'median_income'],
-          '#f7fbff',
-          25000, '#c6dbef',
-          50000, '#6baed6',
-          75000, '#2171b5',
-          125000, '#08306b',
-        ],
-      ],
-      'fill-opacity': 0.55,
     },
   });
 
