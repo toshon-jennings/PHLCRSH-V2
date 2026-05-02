@@ -30,13 +30,20 @@ export async function initMap(container: string) {
 
   const result = await query(`
   SELECT
-    CAST(seg_id AS INTEGER)      AS seg_id,
-    CAST(crash_count AS INTEGER) AS crash_count,
-    CAST(cartway_width_ft AS FLOAT) AS  cartway_width_ft,
-    CAST(canopy_pct AS FLOAT) AS              canopy_pct,
-    CAST(grade_range_smooth AS FLOAT) AS      grade_range_smooth,
-    CAST(maxspeed_final AS FLOAT) AS          maxspeed_final,
-    ST_AsGeoJSON(geometry)       AS geojson
+    CAST(seg_id AS INTEGER)             AS seg_id,
+    CAST(crash_count AS INTEGER)        AS crash_count,
+    CAST(cartway_width_ft AS FLOAT)     AS cartway_width_ft,
+    CAST(canopy_pct AS FLOAT)           AS canopy_pct,
+    CAST(grade_range_smooth AS FLOAT)   AS grade_range_smooth,
+    CAST(maxspeed_final AS FLOAT)       AS maxspeed_final,
+    CAST(state_total_width_ft AS FLOAT) AS state_total_width_ft,
+    CAST(state_lane_cnt AS INTEGER)     AS state_lane_cnt,
+    GEOID,
+    st_name,
+    st_type,
+    class                               AS road_class,
+    state_divisor_type,
+    ST_AsGeoJSON(geometry)              AS geojson
   FROM segments
 `);
 
@@ -50,6 +57,13 @@ export async function initMap(container: string) {
       canopy_pct: r.canopy_pct,
       grade_range_smooth: r.grade_range_smooth,
       maxspeed_final: r.maxspeed_final,
+      state_total_width_ft: r.state_total_width_ft,
+      state_lane_cnt: r.state_lane_cnt,
+      GEOID: r.GEOID,
+      st_name: r.st_name,
+      st_type: r.st_type,
+      road_class: r.road_class,
+      state_divisor_type: r.state_divisor_type,
     },
     geometry: JSON.parse(r.geojson),
   }));
@@ -298,6 +312,18 @@ export async function initMap(container: string) {
     },
   });
 
+  // Pinned segment highlight
+  map.addLayer({
+    id: 'segments-pinned',
+    type: 'line',
+    source: 'segments',
+    paint: {
+      'line-color': '#ffe500',
+      'line-width': ['case', ['boolean', ['feature-state', 'pinned'], false], 5, 0],
+      'line-opacity': ['case', ['boolean', ['feature-state', 'pinned'], false], 1, 0],
+    },
+  });
+
   // Invisible wide layer on top for reliable hit detection
   map.addLayer({
     id: 'segments-hit',
@@ -307,11 +333,12 @@ export async function initMap(container: string) {
   });
 
   let hoveredId: number | string | null = null;
+  let pinnedSegId: number | string | null = null;
   const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
 
   map.on('mousemove', 'segments-hit', (e) => {
     if (!e.features?.length) return;
-    map.getCanvas().style.cursor = 'crosshair';
+    map.getCanvas().style.cursor = 'pointer';
 
     const id = e.features[0].id as number | string;
     if (hoveredId !== null && hoveredId !== id) {
@@ -320,6 +347,7 @@ export async function initMap(container: string) {
     hoveredId = id;
     map.setFeatureState({ source: 'segments', id }, { hover: true });
 
+    if (id === pinnedSegId) { popup.remove(); return; }
     const p = e.features[0].properties as any;
     popup.setLngLat(e.lngLat).setHTML(segmentPopupHTML(p)).addTo(map);
   });
@@ -484,6 +512,8 @@ export async function initMap(container: string) {
   const clearGradeOutliers = () => {
     map.setLayoutProperty('grade-outliers', 'visibility', 'none');
     map.setLayoutProperty('grade-outlier-markers', 'visibility', 'none');
+    map.setFilter('grade-outliers',        ['>', ['get', 'grade_range_smooth'], 0.15]);
+    map.setFilter('grade-outlier-markers', ['>', ['get', 'grade_range_smooth'], 0.15]);
   };
 
   setupGroup(
@@ -517,6 +547,275 @@ export async function initMap(container: string) {
       { toggleId: 'toggle-income',     layerId: 'median-income', legendId: 'legend-income' },
     ],
   );
+
+  // ── Sidebar state ────────────────────────────────────────────────────────
+
+  let activeChipId: string | null = null;
+
+  function setSidebarMode(mode: 'idle' | 'pinned' | 'story', payload?: any) {
+    const sidebar = document.getElementById('sidebar')!;
+    const hasChip = mode === 'story' ? true : !!activeChipId;
+    sidebar.className = `mode-${mode}${hasChip ? ' has-active-chip' : ''}`;
+    if (mode === 'story' && payload) {
+      activeChipId = payload.id;
+      sidebar.className = 'mode-story has-active-chip';
+      renderStoryContent(payload);
+    }
+  }
+
+  function unpin() {
+    if (pinnedSegId !== null) {
+      map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
+      pinnedSegId = null;
+    }
+    if (activeChipId) {
+      setSidebarMode('story', CHIPS.find(c => c.id === activeChipId));
+    } else {
+      setSidebarMode('idle');
+    }
+  }
+
+  document.getElementById('sidebar-back-story')!.addEventListener('click', unpin);
+
+  document.getElementById('sidebar-back-idle')!.addEventListener('click', () => {
+    activeChipId = null;
+    document.querySelectorAll('.chip').forEach(el => el.classList.remove('active'));
+    setSidebarMode('idle');
+  });
+
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') unpin(); });
+
+  map.on('click', (e) => {
+    const hit = map.queryRenderedFeatures(e.point, { layers: ['segments-hit'] });
+    if (!hit.length && pinnedSegId !== null) unpin();
+  });
+
+  map.on('click', 'segments-hit', (e) => {
+    if (!e.features?.length) return;
+    const id = e.features[0].id as number | string;
+    const props = e.features[0].properties as any;
+    if (pinnedSegId !== null && pinnedSegId !== id) {
+      map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
+    }
+    pinnedSegId = id;
+    map.setFeatureState({ source: 'segments', id }, { pinned: true });
+    setSidebarMode('pinned');
+    renderPinnedStats(props);
+    runPeerQuery(props);
+  });
+
+  // ── Pinned inspector ─────────────────────────────────────────────────────
+
+  function renderPinnedStats(p: any) {
+    const content = document.getElementById('pinned-content')!;
+    const streetName = [p.st_name, p.st_type].filter(Boolean).join(' ') || 'Unknown segment';
+    const fmt = (v: any, suffix: string, dec = 0) =>
+      v != null && !isNaN(+v) ? `${(+v).toFixed(dec)}${suffix}` : '—';
+
+    const delta = (p.cartway_width_ft != null && p.state_total_width_ft != null)
+      ? +p.cartway_width_ft - +p.state_total_width_ft : null;
+    const deltaStr = delta != null
+      ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ft vs state` : null;
+    const deltaCls = delta != null && Math.abs(delta) > 3 ? (delta > 0 ? ' warn' : ' good') : '';
+
+    const rows: [string, string, string][] = [
+      ['Crashes',       fmt(p.crash_count, ''),                       ''],
+      ['Canopy',        fmt(p.canopy_pct != null ? p.canopy_pct * 100 : null, '%'),         ''],
+      ['Grade',         fmt(p.grade_range_smooth != null ? p.grade_range_smooth * 100 : null, '%', 1), ''],
+      ['Speed',         fmt(p.maxspeed_final, ' mph'),                ''],
+      ['Width (calc.)', fmt(p.cartway_width_ft, ' ft'),               ''],
+    ];
+    if (deltaStr) rows.push(['Width (state)',
+      `${fmt(p.state_total_width_ft, ' ft')} <small style="color:#666">${deltaStr}</small>`, deltaCls]);
+    if (p.state_lane_cnt != null) rows.push(['State lanes', String(p.state_lane_cnt), '']);
+    if (p.state_divisor_type && p.state_divisor_type !== 'null')
+      rows.push(['Divider', p.state_divisor_type, '']);
+
+    content.innerHTML = `
+      <div class="pinned-street">
+        <div class="pinned-street-name">${streetName}</div>
+      </div>
+      ${rows.map(([label, val, cls]) =>
+        `<div class="stat-row${cls}"><span>${label}</span><strong>${val}</strong></div>`
+      ).join('')}
+      <div class="peer-comparison" id="peer-comparison">
+        <h4>Loading block-group context…</h4>
+      </div>`;
+  }
+
+  async function runPeerQuery(p: any) {
+    const peerEl = document.getElementById('peer-comparison');
+    if (!peerEl) return;
+
+    const geoid: string | null = p.GEOID && p.GEOID !== 'null' ? String(p.GEOID) : null;
+    if (!geoid) { peerEl.innerHTML = '<h4>No block group data for this segment.</h4>'; return; }
+
+    const sql =
+`SELECT
+  COUNT(*) AS peer_n,
+  MEDIAN(crash_count) AS bg_median_crash,
+  MEDIAN(canopy_pct)  AS bg_median_canopy,
+  SUM(CASE WHEN crash_count <= ${p.crash_count} THEN 1 ELSE 0 END) * 1.0
+    / COUNT(*) AS crash_pctile
+FROM segments
+WHERE GEOID = '${geoid}'`;
+
+    try {
+      const result = await query(sql);
+      const row = result.toArray()[0] as any;
+      const n        = Number(row.peer_n);
+      const pctile   = row.crash_pctile != null ? Math.round(+row.crash_pctile * 100) : null;
+      const medCrash = row.bg_median_crash != null ? (+row.bg_median_crash).toFixed(0) : '—';
+      const medCanopy = row.bg_median_canopy != null
+        ? `${(+row.bg_median_canopy * 100).toFixed(0)}%` : '—';
+
+      peerEl.innerHTML = `
+        <h4>Block group (${n} segments)</h4>
+        <div class="stat-row">
+          <span>Crashes — block-group median</span>
+          <strong>${medCrash}${pctile != null ? ` <small style="color:#666">(this: ${pctile}th pctile)</small>` : ''}</strong>
+        </div>
+        <div class="stat-row">
+          <span>Canopy — block-group median</span>
+          <strong>${medCanopy}</strong>
+        </div>
+        <details class="sql-details">
+          <summary>View DuckDB query</summary>
+          <pre>${sql}</pre>
+        </details>`;
+    } catch (err) {
+      peerEl.innerHTML = '<h4>Query failed.</h4>';
+      console.error(err);
+    }
+  }
+
+  // ── Story chips ──────────────────────────────────────────────────────────
+
+  type StoryChip = {
+    id: string;
+    title: string;
+    hook: string;
+    toggleIds: string[];
+    camera: maplibregl.FlyToOptions;
+    stat: string;
+    writeup: string;
+    extras?: 'grade-outlier-slider';
+  };
+
+  const CHIPS: StoryChip[] = [
+    {
+      id: 'canopy-width',
+      title: 'Canopy on Narrow Streets',
+      hook: 'Tree cover reduces crashes — but mostly on narrow residential roads.',
+      toggleIds: ['toggle-canopy-width'],
+      camera: { center: [-75.198, 39.957], zoom: 14.5 },
+      stat: 'Narrow residential streets with moderate canopy show ~15–25% fewer crashes than equivalent streets with no canopy.',
+      writeup: 'Wide arterial roads are built for speed, and nothing about tree cover changes that calculus. But on the narrow residential streets where most of Philadelphia\'s pedestrian life happens, canopy coverage is a meaningful predictor of safety. Streets that are wide <em>and</em> treeless — the orange segments — show the highest crash concentrations.',
+    },
+    {
+      id: 'grade-speed',
+      title: 'Grade × Speed Paradox',
+      hook: 'Steep hills mean fewer crashes — until they don\'t.',
+      toggleIds: ['toggle-grade-speed'],
+      camera: { center: [-75.221, 40.025], zoom: 14, pitch: 30, bearing: -20 },
+      stat: 'On 25 mph streets, 10% grade is associated with ~65% fewer crashes. On 45+ mph arterials, the relationship reverses — grade becomes a hazard.',
+      writeup: 'On slow residential streets, hills are self-calming: drivers naturally brake on steep grades. But on faster arterials, grade amplifies risk. Stopping distances increase, reaction time is compressed, and the consequences of a mistake are more severe. The same slope that makes a Manayunk side street relatively safe makes a fast connector road more dangerous.',
+    },
+    {
+      id: 'method-check',
+      title: 'Where My Method Probably Failed',
+      hook: 'The grade calculation breaks on bridges, ramps, and very short segments.',
+      toggleIds: ['toggle-grade'],
+      camera: { center: [-75.178, 40.008], zoom: 13.5 },
+      stat: 'Some segments show grades above 15% — physically implausible for a drivable city road. Most are measurement artifacts.',
+      writeup: 'I calculated grade from LiDAR elevation data, smoothed with a 20m rolling average. That smoothing helps on real hills but fails on infrastructure transitions: bridges create abrupt elevation spikes, ramps join roads at grade mid-span, and very short segments don\'t have enough length for the smoothing to behave. Use the slider to explore the threshold and see where the calculation goes wrong.',
+      extras: 'grade-outlier-slider',
+    },
+  ];
+
+  function activateChip(chip: StoryChip) {
+    document.querySelectorAll<HTMLInputElement>('#layer-panel input[type=checkbox]').forEach(input => {
+      const should = chip.toggleIds.includes(input.id);
+      if (input.checked !== should) {
+        input.checked = should;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    map.flyTo({ ...chip.camera, essential: true });
+    setSidebarMode('story', chip);
+    document.querySelectorAll('.chip').forEach(el =>
+      el.classList.toggle('active', el.getAttribute('data-chip-id') === chip.id));
+  }
+
+  function renderStoryContent(chip: StoryChip) {
+    const el = document.getElementById('story-content')!;
+    const sliderHtml = chip.extras === 'grade-outlier-slider' ? `
+      <div class="outlier-slider-wrap">
+        <div class="outlier-slider-label">
+          <span>Outlier threshold</span>
+          <strong id="slider-val">15%</strong>
+        </div>
+        <input type="range" class="outlier-slider" id="outlier-threshold-slider"
+               min="5" max="30" value="15" step="1">
+        <div class="outlier-count" id="outlier-count">Counting…</div>
+      </div>` : '';
+    el.innerHTML = `
+      <div class="story-label">Finding</div>
+      <div class="story-title">${chip.title}</div>
+      <div class="story-stat">${chip.stat}</div>
+      <div class="story-writeup">${chip.writeup}</div>
+      ${sliderHtml}`;
+
+    if (chip.extras === 'grade-outlier-slider') {
+      const checkbox = document.getElementById('toggle-grade-outliers') as HTMLInputElement | null;
+      if (checkbox && !checkbox.checked) {
+        checkbox.checked = true;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      setupOutlierSlider();
+    }
+  }
+
+  function setupOutlierSlider() {
+    const slider = document.getElementById('outlier-threshold-slider') as HTMLInputElement | null;
+    const valLabel = document.getElementById('slider-val');
+    const countEl  = document.getElementById('outlier-count');
+    if (!slider || !valLabel || !countEl) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    async function apply(threshold: number) {
+      valLabel.textContent = `${threshold}%`;
+      const t = threshold / 100;
+      map.setFilter('grade-outliers',        ['>', ['get', 'grade_range_smooth'], t]);
+      map.setFilter('grade-outlier-markers', ['>', ['get', 'grade_range_smooth'], t]);
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try {
+          const res = await query(`SELECT COUNT(*) AS n FROM segments WHERE grade_range_smooth > ${t}`);
+          const n = Number((res.toArray()[0] as any).n);
+          countEl.textContent = `${n.toLocaleString()} segments flagged at ≥${threshold}% grade`;
+        } catch { countEl.textContent = ''; }
+      }, 150);
+    }
+    slider.addEventListener('input', () => apply(Number(slider.value)));
+    apply(15);
+  }
+
+  function renderChipList() {
+    const listEl = document.getElementById('chip-list')!;
+    listEl.innerHTML = CHIPS.map(c => `
+      <button class="chip" data-chip-id="${c.id}">
+        <div class="chip-title">${c.title}</div>
+        <div class="chip-hook">${c.hook}</div>
+      </button>`).join('');
+    listEl.querySelectorAll<HTMLButtonElement>('.chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activateChip(CHIPS.find(c => c.id === btn.dataset.chipId)!);
+      });
+    });
+  }
+
+  renderChipList();
 
   return map;
 }

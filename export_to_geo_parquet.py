@@ -25,6 +25,7 @@ df_4326 = df.to_crs(4326)
 
 keep_cols = [
     "seg_id",
+    "GEOID",
     "st_name",
     "st_type",
     "class",
@@ -48,6 +49,10 @@ keep_cols = [
     "grade_smooth_p90",
     "median_income",
     "population",
+    "state_lane_cnt",
+    "state_total_width_ft",
+    "state_divisor_type",
+    "state_road_distance",
     "geometry",
 ]
 

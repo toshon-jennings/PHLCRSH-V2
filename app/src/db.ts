@@ -66,14 +66,30 @@ export async function query(sql: string, db?: duckdb.AsyncDuckDB) {
 
 async function getOrFetch(fileName: string, url: string): Promise<FileSystemFileHandle> {
   const root = await navigator.storage.getDirectory();
+  const etagKey = `etag:${fileName}`;
+
+  const headRes = await fetch(url, { method: 'HEAD' });
+  const remoteEtag = headRes.headers.get('ETag');
+  const storedEtag = localStorage.getItem(etagKey);
+
+  let handle: FileSystemFileHandle;
+  let needsFetch = true;
+
   try {
-    return await root.getFileHandle(fileName);
+    handle = await root.getFileHandle(fileName);
+    needsFetch = !remoteEtag || remoteEtag !== storedEtag;
   } catch {
-    const handle = await root.getFileHandle(fileName, { create: true });
+    handle = await root.getFileHandle(fileName, { create: true });
+    needsFetch = true;
+  }
+
+  if (needsFetch) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const writable = await handle.createWritable();
     await res.body!.pipeTo(writable);
-    return handle;
+    if (remoteEtag) localStorage.setItem(etagKey, remoteEtag);
   }
+
+  return handle;
 }

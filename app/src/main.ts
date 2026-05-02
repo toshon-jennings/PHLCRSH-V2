@@ -4,12 +4,9 @@ import { initMap, } from './map';
 async function main() {
   const statusEl = document.getElementById('status')!;
 
-  statusEl.textContent = 'Initializing DuckDB…';
+  console.log('[phlcrsh] Initializing DuckDB…');
   await initDB();
-  statusEl.textContent = 'DuckDB ready. Loading datasets…';
-
-  // await ensureDatasets(DATASETS);
-  // statusEl.textContent = 'Data loaded. Rendering map…';
+  console.log('[phlcrsh] DuckDB ready. Loading map…');
 
   initMap('map');
 
@@ -18,5 +15,5 @@ async function main() {
 main().catch((err) => {
   console.error(err);
   const statusEl = document.getElementById('status');
-  if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+  if (statusEl) { statusEl.classList.add('error'); statusEl.textContent = `Error: ${err.message}`; }
 });
