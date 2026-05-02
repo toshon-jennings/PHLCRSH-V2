@@ -3,4 +3,4 @@ transformed-data*
 .DS_Store
 .env
 __pycache__
-cache
+cachescratchpad.ipynb
