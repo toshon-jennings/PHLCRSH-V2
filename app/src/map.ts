@@ -12,6 +12,7 @@ import {
   loadPhiladelphiaBoundary,
   loadSegmentFeatures,
   type SegmentProperties,
+  type StoryFocalExample,
 } from './mapQueries';
 import {
   BLOCK_GROUP_LAYER_GROUP,
@@ -59,6 +60,7 @@ export async function initMap(container: string) {
 
   let hoveredId: number | string | null = null;
   let pinnedSegId: number | string | null = null;
+  let storyFocusedSegId: number | string | null = null;
   const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
 
   map.on('mousemove', 'segments-hit', (e) => {
@@ -267,7 +269,7 @@ export async function initMap(container: string) {
     if (mode === 'story' && payload) {
       activeChipId = payload.id;
       sidebar.className = `mode-story has-active-chip${collapsedClass}`;
-      renderStoryContent(payload, map);
+      renderStoryContent(payload, map, focusStoryExample);
     }
   }
 
@@ -275,6 +277,10 @@ export async function initMap(container: string) {
     if (pinnedSegId !== null) {
       map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
       pinnedSegId = null;
+    }
+    if (storyFocusedSegId !== null) {
+      map.setFeatureState({ source: 'segments', id: storyFocusedSegId }, { pinned: false });
+      storyFocusedSegId = null;
     }
     const chip = findChip(activeChipId);
     if (chip) {
@@ -308,12 +314,39 @@ export async function initMap(container: string) {
     if (pinnedSegId !== null && pinnedSegId !== id) {
       map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
     }
+    if (storyFocusedSegId !== null && storyFocusedSegId !== id) {
+      map.setFeatureState({ source: 'segments', id: storyFocusedSegId }, { pinned: false });
+      storyFocusedSegId = null;
+    }
     pinnedSegId = id;
     map.setFeatureState({ source: 'segments', id }, { pinned: true });
     setSidebarMode('pinned');
     renderPinnedStats(props);
     runPeerQuery(props);
   });
+
+  function focusStoryExample(example: StoryFocalExample) {
+    const id = example.properties.seg_id;
+    if (storyFocusedSegId !== null && storyFocusedSegId !== id) {
+      map.setFeatureState({ source: 'segments', id: storyFocusedSegId }, { pinned: false });
+    }
+    if (pinnedSegId !== null && pinnedSegId !== id) {
+      map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
+    }
+
+    storyFocusedSegId = id;
+    pinnedSegId = id;
+    map.setFeatureState({ source: 'segments', id }, { pinned: true });
+
+    const center = lineFeatureCenter(example.geometry);
+    if (center) {
+      map.flyTo({ center, zoom: Math.max(map.getZoom(), 15), essential: true });
+    }
+
+    setSidebarMode('pinned');
+    renderPinnedStats(example.properties);
+    runPeerQuery(example.properties);
+  }
 
   function renderPinnedStats(p: SegmentProperties) {
     const content = document.getElementById('pinned-content')!;
@@ -397,4 +430,23 @@ export async function initMap(container: string) {
   setupCollapsiblePanels();
 
   return map;
+}
+
+function lineFeatureCenter(geometry: any): [number, number] | null {
+  const coords = firstLineCoordinates(geometry?.coordinates);
+  if (!coords.length) return null;
+  const mid = coords[Math.floor(coords.length / 2)];
+  return Array.isArray(mid) && typeof mid[0] === 'number' && typeof mid[1] === 'number'
+    ? [mid[0], mid[1]]
+    : null;
+}
+
+function firstLineCoordinates(coords: any): any[] {
+  if (!Array.isArray(coords)) return [];
+  if (coords.length && typeof coords[0]?.[0] === 'number') return coords;
+  for (const item of coords) {
+    const line = firstLineCoordinates(item);
+    if (line.length) return line;
+  }
+  return [];
 }

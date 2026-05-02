@@ -1,6 +1,6 @@
 import type maplibregl from 'maplibre-gl';
 import { GRADE_OUTLIER_THRESHOLD, setGradeOutlierThreshold } from './mapLayers';
-import { countGradeOutliers } from './mapQueries';
+import { countGradeOutliers, loadStoryFocalExamples, type StoryFocalExample } from './mapQueries';
 
 export type StoryChip = {
   id: string;
@@ -49,6 +49,7 @@ export function findChip(id: string | null): StoryChip | undefined {
 }
 
 export type SetSidebarMode = (mode: 'idle' | 'pinned' | 'story', payload?: StoryChip) => void;
+export type FocusStoryExample = (example: StoryFocalExample) => void;
 
 export function activateChip(chip: StoryChip, map: maplibregl.Map, setSidebarMode: SetSidebarMode) {
   document.querySelectorAll<HTMLInputElement>('#layer-panel input[type=checkbox]').forEach((input) => {
@@ -65,8 +66,9 @@ export function activateChip(chip: StoryChip, map: maplibregl.Map, setSidebarMod
   );
 }
 
-export function renderStoryContent(chip: StoryChip, map: maplibregl.Map) {
+export function renderStoryContent(chip: StoryChip, map: maplibregl.Map, onFocusExample: FocusStoryExample) {
   const el = document.getElementById('story-content')!;
+  el.dataset.storyId = chip.id;
   const sliderHtml = chip.extras === 'grade-outlier-slider' ? `
     <div class="outlier-slider-wrap">
       <div class="outlier-slider-label">
@@ -82,6 +84,9 @@ export function renderStoryContent(chip: StoryChip, map: maplibregl.Map) {
     <div class="story-title">${chip.title}</div>
     <div class="story-stat">${chip.stat}</div>
     <div class="story-writeup">${chip.writeup}</div>
+    <div class="story-focal-examples" id="story-focal-examples">
+      <div class="story-focal-loading">Finding live examples…</div>
+    </div>
     ${sliderHtml}`;
 
   if (chip.extras === 'grade-outlier-slider') {
@@ -92,6 +97,8 @@ export function renderStoryContent(chip: StoryChip, map: maplibregl.Map) {
     }
     setupOutlierSlider(map);
   }
+
+  renderFocalExamples(chip, onFocusExample);
 }
 
 export function renderChipList(onActivate: (chip: StoryChip) => void) {
@@ -134,4 +141,75 @@ function setupOutlierSlider(map: maplibregl.Map) {
   }
   slider.addEventListener('input', () => apply(Number(slider.value)));
   apply(GRADE_OUTLIER_THRESHOLD * 100);
+}
+
+async function renderFocalExamples(chip: StoryChip, onFocusExample: FocusStoryExample) {
+  const storyEl = document.getElementById('story-content') as HTMLElement | null;
+  const target = document.getElementById('story-focal-examples') as HTMLElement | null;
+  if (!storyEl || !target) return;
+
+  try {
+    const focal = await loadStoryFocalExamples(chip.id);
+    if (storyEl.dataset.storyId !== chip.id) return;
+
+    if (!focal.examples.length) {
+      target.innerHTML = '<div class="story-focal-empty">No live examples matched this story.</div>';
+      return;
+    }
+
+    target.innerHTML = `
+      <div class="story-focal-label">Live examples</div>
+      <div class="story-focal-list">
+        ${focal.examples.map((example, idx) => renderFocalExampleButton(example, idx)).join('')}
+      </div>
+      <details class="sql-details story-sql">
+        <summary>View DuckDB query</summary>
+        <pre>${escapeHtml(focal.sql.trim())}</pre>
+      </details>`;
+
+    target.querySelectorAll<HTMLButtonElement>('.story-focal-card').forEach((button) => {
+      const example = focal.examples[Number(button.dataset.exampleIndex)];
+      if (!example) return;
+      button.addEventListener('click', () => onFocusExample(example));
+    });
+  } catch (err) {
+    console.error(err);
+    if (storyEl.dataset.storyId === chip.id) {
+      target.innerHTML = '<div class="story-focal-empty">Example query failed.</div>';
+    }
+  }
+}
+
+function renderFocalExampleButton(example: StoryFocalExample, idx: number) {
+  const p = example.properties;
+  const streetName = [p.st_name, p.st_type].filter(Boolean).join(' ') || 'Unknown segment';
+  const crash = p.crash_count == null ? '—' : String(p.crash_count);
+  const canopy = p.canopy_pct == null ? '—' : `${(p.canopy_pct * 100).toFixed(0)}%`;
+  const width = p.cartway_width_ft == null ? '—' : `${p.cartway_width_ft.toFixed(0)} ft`;
+  const grade = p.grade_range_smooth == null ? '—' : `${(p.grade_range_smooth * 100).toFixed(1)}%`;
+  const speed = p.maxspeed_final == null ? '—' : `${p.maxspeed_final.toFixed(0)} mph`;
+
+  return `
+    <button class="story-focal-card" type="button" data-example-index="${idx}">
+      <span class="story-focal-card-label">${escapeHtml(example.label)}</span>
+      <strong>${escapeHtml(streetName)}</strong>
+      <span class="story-focal-reason">${escapeHtml(example.reason)}</span>
+      <span class="story-focal-metrics">
+        <span>Crashes ${escapeHtml(crash)}</span>
+        <span>Canopy ${escapeHtml(canopy)}</span>
+        <span>Width ${escapeHtml(width)}</span>
+        <span>Grade ${escapeHtml(grade)}</span>
+        <span>Speed ${escapeHtml(speed)}</span>
+      </span>
+    </button>`;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char] ?? char));
 }

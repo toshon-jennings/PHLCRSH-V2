@@ -15,7 +15,7 @@ bg_vals = (
     .dropna(subset=["GEOID"])
 )
 bg_vals["median_income"] = bg_vals["median_income"].where(bg_vals["median_income"] >= 0, other=None)
-bg_export = bg_geom.merge(bg_vals, on="GEOID", how="inner")
+bg_export = bg_geom.merge(bg_vals, on="GEOID", how="left")
 bg_export.to_parquet("philly_block_groups.parquet", compression="zstd")
 print(f"Exported {len(bg_export):,} block groups")
 print(f"Block groups file size: {os.path.getsize('philly_block_groups.parquet') / 1e6:.1f} MB")
