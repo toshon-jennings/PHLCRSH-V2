@@ -34,7 +34,7 @@ export const CHIPS: StoryChip[] = [
   },
   {
     id: 'method-check',
-    title: 'The grade of salt',
+    title: 'Take it with a Grade of Salt',
     hook: 'The grade calculation is not robust on bridges, ramps, and very short segments.',
     toggleIds: ['toggle-grade'],
     camera: { center: [-75.178, 40.008], zoom: 13.5 },

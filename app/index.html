@@ -37,6 +37,21 @@
         </aside>
 
         <div id="map">
+          <div id="loading-screen" role="status" aria-live="polite">
+            <div class="loading-panel">
+              <div class="loading-mark" aria-hidden="true">
+                <span></span>
+              </div>
+              <div class="loading-copy">
+                <div class="loading-kicker">PHLCRSH</div>
+                <div class="loading-title">Loading map data</div>
+                <div class="loading-message" id="loading-message">Preparing DuckDB and local data cache…</div>
+              </div>
+              <div class="loading-bar" aria-hidden="true">
+                <span></span>
+              </div>
+            </div>
+          </div>
           <div id="layer-panel">
             <div class="layer-panel-header">
               <div class="layer-panel-title">Layers</div>
