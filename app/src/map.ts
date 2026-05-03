@@ -61,9 +61,14 @@ export async function initMap(container: string) {
   let hoveredId: number | string | null = null;
   let pinnedSegId: number | string | null = null;
   let storyFocusedSegId: number | string | null = null;
+  const mobileLayout = window.matchMedia('(max-width: 760px)');
+  const coarsePointer = window.matchMedia('(pointer: coarse)');
+  const isMobileLayout = () => mobileLayout.matches;
+  const suppressHoverPopup = () => isMobileLayout() || coarsePointer.matches;
   const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
 
   map.on('mousemove', 'segments-hit', (e) => {
+    if (suppressHoverPopup()) return;
     if (!e.features?.length) return;
     map.getCanvas().style.cursor = 'pointer';
 
@@ -230,9 +235,14 @@ export async function initMap(container: string) {
         const expanded = !panel.classList.contains('is-collapsed');
         toggles.forEach((toggle) => {
           const icon = toggle.querySelector<HTMLElement>('.panel-collapse-icon');
+          const mobileSidebar = panelId === 'sidebar' && isMobileLayout();
           toggle.setAttribute('aria-expanded', String(expanded));
           toggle.setAttribute('aria-label', expanded ? labels.collapse : labels.expand);
-          if (icon) icon.textContent = expanded ? expandedIcon : collapsedIcon;
+          if (icon) {
+            icon.textContent = mobileSidebar
+              ? (expanded ? '⌄' : '⌃')
+              : (expanded ? expandedIcon : collapsedIcon);
+          }
         });
         if (panelId === 'layer-panel') {
           panel.setAttribute('aria-hidden', String(!expanded));
@@ -242,17 +252,27 @@ export async function initMap(container: string) {
       toggles.forEach((toggle) => toggle.addEventListener('click', () => {
         panel.classList.toggle('is-collapsed');
         sync();
+        if (panelId === 'layer-panel' && isMobileLayout() && !panel.classList.contains('is-collapsed')) {
+          const sidebar = document.getElementById('sidebar');
+          const sidebarToggle = document.getElementById('sidebar-toggle') as HTMLButtonElement | null;
+          if (sidebar && !sidebar.classList.contains('is-collapsed')) sidebarToggle?.click();
+        }
         onChange?.();
       }));
       panel.addEventListener('transitionend', (event) => {
-        if (event.target === panel && event.propertyName === 'width') {
+        if (
+          event.target === panel
+          && ['width', 'max-height', 'transform'].includes(event.propertyName)
+        ) {
           map.resize();
         }
       });
       sync();
+      mobileLayout.addEventListener('change', sync);
+      return { panel, sync };
     };
 
-    setupPanelToggle(
+    const sidebarPanel = setupPanelToggle(
       'sidebar',
       'sidebar-toggle',
       '‹',
@@ -261,13 +281,28 @@ export async function initMap(container: string) {
       resizeMapDuringSidebarMotion,
     );
 
-    setupPanelToggle(
+    const layerPanel = setupPanelToggle(
       'layer-panel',
       ['layer-panel-toggle', 'layer-panel-restore'],
       '›',
       '‹',
       { expand: 'Expand layers panel', collapse: 'Collapse layers panel' },
     );
+
+    const syncMobilePanelState = () => {
+      const mobile = isMobileLayout();
+      if (sidebarPanel) {
+        sidebarPanel.panel.classList.toggle('is-collapsed', mobile);
+        sidebarPanel.sync();
+      }
+      if (layerPanel) {
+        layerPanel.panel.classList.toggle('is-collapsed', mobile);
+        layerPanel.sync();
+      }
+      window.setTimeout(() => map.resize(), 260);
+    };
+    syncMobilePanelState();
+    mobileLayout.addEventListener('change', syncMobilePanelState);
 
     document.querySelectorAll<HTMLButtonElement>('.panel-section-toggle').forEach((toggle) => {
       const section = toggle.closest('.panel-section') as HTMLElement | null;
@@ -290,6 +325,16 @@ export async function initMap(container: string) {
 
   let activeChipId: string | null = null;
 
+  function expandMobileSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebar-toggle') as HTMLButtonElement | null;
+    const layerPanel = document.getElementById('layer-panel');
+    const layerToggle = document.getElementById('layer-panel-toggle') as HTMLButtonElement | null;
+    if (!isMobileLayout()) return;
+    if (layerPanel && !layerPanel.classList.contains('is-collapsed')) layerToggle?.click();
+    if (sidebar?.classList.contains('is-collapsed')) toggle?.click();
+  }
+
   function setSidebarMode(mode: 'idle' | 'pinned' | 'story', payload?: StoryChip) {
     const sidebar = document.getElementById('sidebar')!;
     const hasChip = mode === 'story' ? true : !!activeChipId;
@@ -300,6 +345,7 @@ export async function initMap(container: string) {
       sidebar.className = `mode-story has-active-chip${collapsedClass}`;
       renderStoryContent(payload, map, focusStoryExample);
     }
+    if (mode !== 'idle') expandMobileSidebar();
   }
 
   function unpin() {
