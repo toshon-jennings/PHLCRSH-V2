@@ -66,6 +66,8 @@ export async function initMap(container: string) {
   const isMobileLayout = () => mobileLayout.matches;
   const suppressHoverPopup = () => isMobileLayout() || coarsePointer.matches;
   const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+  type MobileSheetState = 'collapsed' | 'peek' | 'full';
+  let mobileSheetState: MobileSheetState = 'full';
 
   map.on('mousemove', 'segments-hit', (e) => {
     if (suppressHoverPopup()) return;
@@ -194,6 +196,53 @@ export async function initMap(container: string) {
   setupGroup(INTERACTION_LAYER_GROUP);
   setupGroup(BLOCK_GROUP_LAYER_GROUP);
 
+  function syncMobileSidebarButton() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebar-toggle') as HTMLButtonElement | null;
+    const icon = toggle?.querySelector<HTMLElement>('.panel-collapse-icon');
+    if (!sidebar || !toggle || !isMobileLayout()) return;
+
+    const expanded = mobileSheetState !== 'collapsed';
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-label', mobileSheetState === 'full' ? 'Collapse panel' : 'Expand panel');
+    if (icon) icon.textContent = mobileSheetState === 'full' ? '⌄' : '⌃';
+  }
+
+  function setMobileSheetState(state: MobileSheetState) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    mobileSheetState = state;
+    sidebar.classList.remove('mobile-sheet-collapsed', 'mobile-sheet-peek', 'mobile-sheet-full');
+
+    if (isMobileLayout()) {
+      sidebar.classList.toggle('is-collapsed', state === 'collapsed');
+      sidebar.classList.add(`mobile-sheet-${state}`);
+      syncMobileSidebarButton();
+      window.setTimeout(() => map.resize(), 260);
+    }
+  }
+
+  function collapseMobileLayers() {
+    const layerPanel = document.getElementById('layer-panel');
+    const layerToggle = document.getElementById('layer-panel-toggle') as HTMLButtonElement | null;
+    if (isMobileLayout() && layerPanel && !layerPanel.classList.contains('is-collapsed')) {
+      layerToggle?.click();
+    }
+  }
+
+  function showMobilePinnedPeek() {
+    if (!isMobileLayout()) return;
+    collapseMobileLayers();
+    setMobileSheetState('peek');
+  }
+
+  function toggleMobileSheetFromHeader() {
+    if (!isMobileLayout()) return false;
+    collapseMobileLayers();
+    setMobileSheetState(mobileSheetState === 'full' ? 'collapsed' : 'full');
+    return true;
+  }
+
   function setupCollapsiblePanels() {
     let sidebarResizeFrame = 0;
     let sidebarResizeTimeout = 0;
@@ -232,6 +281,11 @@ export async function initMap(container: string) {
       if (!panel || !toggles.length) return;
 
       const sync = () => {
+        if (panelId === 'sidebar' && isMobileLayout()) {
+          syncMobileSidebarButton();
+          return;
+        }
+
         const expanded = !panel.classList.contains('is-collapsed');
         toggles.forEach((toggle) => {
           const icon = toggle.querySelector<HTMLElement>('.panel-collapse-icon');
@@ -250,12 +304,16 @@ export async function initMap(container: string) {
       };
 
       toggles.forEach((toggle) => toggle.addEventListener('click', () => {
+        if (panelId === 'sidebar' && toggleMobileSheetFromHeader()) {
+          sync();
+          onChange?.();
+          return;
+        }
+
         panel.classList.toggle('is-collapsed');
         sync();
         if (panelId === 'layer-panel' && isMobileLayout() && !panel.classList.contains('is-collapsed')) {
-          const sidebar = document.getElementById('sidebar');
-          const sidebarToggle = document.getElementById('sidebar-toggle') as HTMLButtonElement | null;
-          if (sidebar && !sidebar.classList.contains('is-collapsed')) sidebarToggle?.click();
+          setMobileSheetState('collapsed');
         }
         onChange?.();
       }));
@@ -292,7 +350,13 @@ export async function initMap(container: string) {
     const syncMobilePanelState = () => {
       const mobile = isMobileLayout();
       if (sidebarPanel) {
-        sidebarPanel.panel.classList.toggle('is-collapsed', mobile);
+        sidebarPanel.panel.classList.remove('mobile-sheet-collapsed', 'mobile-sheet-peek', 'mobile-sheet-full');
+        if (mobile) {
+          mobileSheetState = 'collapsed';
+          sidebarPanel.panel.classList.add('mobile-sheet-collapsed', 'is-collapsed');
+        } else {
+          sidebarPanel.panel.classList.remove('is-collapsed');
+        }
         sidebarPanel.sync();
       }
       if (layerPanel) {
@@ -326,13 +390,9 @@ export async function initMap(container: string) {
   let activeChipId: string | null = null;
 
   function expandMobileSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const toggle = document.getElementById('sidebar-toggle') as HTMLButtonElement | null;
-    const layerPanel = document.getElementById('layer-panel');
-    const layerToggle = document.getElementById('layer-panel-toggle') as HTMLButtonElement | null;
     if (!isMobileLayout()) return;
-    if (layerPanel && !layerPanel.classList.contains('is-collapsed')) layerToggle?.click();
-    if (sidebar?.classList.contains('is-collapsed')) toggle?.click();
+    collapseMobileLayers();
+    setMobileSheetState('full');
   }
 
   function setSidebarMode(mode: 'idle' | 'pinned' | 'story', payload?: StoryChip) {
@@ -345,7 +405,8 @@ export async function initMap(container: string) {
       sidebar.className = `mode-story has-active-chip${collapsedClass}`;
       renderStoryContent(payload, map, focusStoryExample);
     }
-    if (mode !== 'idle') expandMobileSidebar();
+    if (mode === 'story') expandMobileSidebar();
+    if (mode === 'idle' && isMobileLayout()) setMobileSheetState('collapsed');
   }
 
   function unpin() {
@@ -398,6 +459,7 @@ export async function initMap(container: string) {
     setSidebarMode('pinned');
     renderPinnedStats(props);
     runPeerQuery(props);
+    showMobilePinnedPeek();
   });
 
   function focusStoryExample(example: StoryFocalExample) {
@@ -421,6 +483,7 @@ export async function initMap(container: string) {
     setSidebarMode('pinned');
     renderPinnedStats(example.properties);
     runPeerQuery(example.properties);
+    showMobilePinnedPeek();
   }
 
   function renderPinnedStats(p: SegmentProperties) {
@@ -456,12 +519,21 @@ export async function initMap(container: string) {
       <div class="pinned-street">
         <div class="pinned-street-name">${streetName}</div>
       </div>
-      ${rows.map(([label, val, cls]) =>
-        `<div class="stat-row${cls}"><span>${label}</span><strong>${val}</strong></div>`
+      <div class="mobile-pinned-actions">
+        <button type="button" id="mobile-pinned-details">Details</button>
+        <button type="button" id="mobile-pinned-close">Close</button>
+      </div>
+      ${rows.map(([label, val, cls], idx) =>
+        `<div class="stat-row${cls}${idx < 5 ? ' peek-visible' : ' peek-extra'}"><span>${label}</span><strong>${val}</strong></div>`
       ).join('')}
       <div class="peer-comparison" id="peer-comparison">
         <h4>Loading block-group context…</h4>
       </div>`;
+
+    content.querySelector<HTMLButtonElement>('#mobile-pinned-details')?.addEventListener('click', () => {
+      setMobileSheetState('full');
+    });
+    content.querySelector<HTMLButtonElement>('#mobile-pinned-close')?.addEventListener('click', unpin);
   }
 
   async function runPeerQuery(p: SegmentProperties) {
