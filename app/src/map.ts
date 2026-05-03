@@ -190,35 +190,64 @@ export async function initMap(container: string) {
   setupGroup(BLOCK_GROUP_LAYER_GROUP);
 
   function setupCollapsiblePanels() {
-    const resizeMapAfterPanelMotion = () => {
-      requestAnimationFrame(() => map.resize());
-      window.setTimeout(() => map.resize(), 240);
+    let sidebarResizeFrame = 0;
+    let sidebarResizeTimeout = 0;
+
+    const resizeMapDuringSidebarMotion = () => {
+      window.cancelAnimationFrame(sidebarResizeFrame);
+      window.clearTimeout(sidebarResizeTimeout);
+
+      const startedAt = performance.now();
+      const tick = () => {
+        map.resize();
+        if (performance.now() - startedAt < 320) {
+          sidebarResizeFrame = window.requestAnimationFrame(tick);
+        }
+      };
+
+      sidebarResizeFrame = window.requestAnimationFrame(tick);
+      sidebarResizeTimeout = window.setTimeout(() => {
+        window.cancelAnimationFrame(sidebarResizeFrame);
+        map.resize();
+      }, 340);
     };
 
     const setupPanelToggle = (
       panelId: string,
-      toggleId: string,
+      toggleIds: string | string[],
       expandedIcon: string,
       collapsedIcon: string,
       labels: { expand: string; collapse: string },
       onChange?: () => void,
     ) => {
       const panel = document.getElementById(panelId);
-      const toggle = document.getElementById(toggleId) as HTMLButtonElement | null;
-      const icon = toggle?.querySelector<HTMLElement>('.panel-collapse-icon');
-      if (!panel || !toggle) return;
+      const toggles = (Array.isArray(toggleIds) ? toggleIds : [toggleIds])
+        .map((id) => document.getElementById(id) as HTMLButtonElement | null)
+        .filter((toggle): toggle is HTMLButtonElement => !!toggle);
+      if (!panel || !toggles.length) return;
 
       const sync = () => {
         const expanded = !panel.classList.contains('is-collapsed');
-        toggle.setAttribute('aria-expanded', String(expanded));
-        toggle.setAttribute('aria-label', expanded ? labels.collapse : labels.expand);
-        if (icon) icon.textContent = expanded ? expandedIcon : collapsedIcon;
+        toggles.forEach((toggle) => {
+          const icon = toggle.querySelector<HTMLElement>('.panel-collapse-icon');
+          toggle.setAttribute('aria-expanded', String(expanded));
+          toggle.setAttribute('aria-label', expanded ? labels.collapse : labels.expand);
+          if (icon) icon.textContent = expanded ? expandedIcon : collapsedIcon;
+        });
+        if (panelId === 'layer-panel') {
+          panel.setAttribute('aria-hidden', String(!expanded));
+        }
       };
 
-      toggle.addEventListener('click', () => {
+      toggles.forEach((toggle) => toggle.addEventListener('click', () => {
         panel.classList.toggle('is-collapsed');
         sync();
         onChange?.();
+      }));
+      panel.addEventListener('transitionend', (event) => {
+        if (event.target === panel && event.propertyName === 'width') {
+          map.resize();
+        }
       });
       sync();
     };
@@ -229,12 +258,12 @@ export async function initMap(container: string) {
       '‹',
       '›',
       { expand: 'Expand sidebar', collapse: 'Collapse sidebar' },
-      resizeMapAfterPanelMotion,
+      resizeMapDuringSidebarMotion,
     );
 
     setupPanelToggle(
       'layer-panel',
-      'layer-panel-toggle',
+      ['layer-panel-toggle', 'layer-panel-restore'],
       '›',
       '‹',
       { expand: 'Expand layers panel', collapse: 'Collapse layers panel' },
