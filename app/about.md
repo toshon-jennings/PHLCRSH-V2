@@ -52,7 +52,13 @@ DuckDB-WASM runs in the browser. The app downloads GeoParquet files, registers t
 
 ## Links
 
-- [Notebook source](https://github.com/benpolinsky/PHLCRSH/blob/main/scratchpad.ipynb)
-- Notebook PDF: pending export in the notebook cleanup slice
+- [Notebook source](https://github.com/benpolinsky/PHLCRSH/blob/main/crash_notebook.ipynb)
+- [Notebook PDF](https://github.com/benpolinsky/PHLCRSH/blob/main/crash_notebook.pdf)
 - [GitHub repository](https://github.com/benpolinsky/PHLCRSH)
 - [Deployed map](https://benpolinsky.github.io/PHLCRSH/)
+
+## Techincal Postscript
+
+DuckDB? OPFS? Why?
+
+Because it was fun and surprisingly easy. Also, it enables powerful data analysis and processing in the browser without a backend. Was that necessary here? No, of course not. The data here is small enough to be processed completely in memory. But we do have some live aggregation that I'd certainly like to benchmark before moving forward beyond a proof of concept.
