@@ -14,7 +14,8 @@ const BUNDLES: duckdb.DuckDBBundles = {
 };
 
 let _db: duckdb.AsyncDuckDB | null = null;
-let _parquetRegistered: boolean = false
+
+type StorageMode = 'chromium-opfs' | 'memory';
 
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
@@ -25,30 +26,34 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
-  // OPFS requires the path to end in .db; Chrome/Edge only — others fall back to in-memory
-  try {
-      // await db.open({ path: ':memory:' })
-    await db.open({
-      path: 'opfs://phlcrsh.db',
-      accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
-    });
-   
-    console.log('[db] opened with OPFS backing');
-  } catch (e) {
-    console.warn('[db] OPFS unavailable, falling back to in-memory:', e);
+  let storageMode: StorageMode = 'memory';
+  if (supportsChromiumOPFS()) {
+    try {
+      await db.open({
+        path: 'opfs://phlcrsh.db',
+        accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+      });
+      storageMode = 'chromium-opfs';
+      console.log('[db] opened with OPFS backing');
+    } catch (e) {
+      console.warn('[db] OPFS unavailable, falling back to in-memory:', e);
+      await db.open({ path: ':memory:' });
+    }
+  } else {
+    console.log('[db] non-Chromium browser detected, using in-memory backing');
     await db.open({ path: ':memory:' });
   }
 
+  await registerParquetFiles(db, storageMode);
+
   const conn = await db.connect();
-  const [segHandle, bgHandle] = await Promise.all([getOrFetch(FILE_NAME, PARQUET_URL), getOrFetch(BG_FILE_NAME, BG_PARQUET_URL)]);
-
-  await db.registerFileHandle(FILE_NAME, segHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
-  await db.registerFileHandle(BG_FILE_NAME, bgHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
-
-  await conn.query('INSTALL spatial; LOAD spatial;');
-  await conn.query(`CREATE OR REPLACE VIEW segments AS SELECT * FROM read_parquet('${PARQUET_URL}')`);
-  await conn.query(`CREATE OR REPLACE VIEW block_groups AS SELECT * FROM read_parquet('${BG_PARQUET_URL}')`);
-  await conn.close();
+  try {
+    await conn.query('INSTALL spatial; LOAD spatial;');
+    await conn.query(`CREATE OR REPLACE VIEW segments AS SELECT * FROM read_parquet('${FILE_NAME}')`);
+    await conn.query(`CREATE OR REPLACE VIEW block_groups AS SELECT * FROM read_parquet('${BG_FILE_NAME}')`);
+  } finally {
+    await conn.close();
+  }
   
   _db = db;
   return db;
@@ -64,12 +69,62 @@ export async function query(sql: string, db?: duckdb.AsyncDuckDB) {
   }
 }
 
-async function getOrFetch(fileName: string, url: string): Promise<FileSystemFileHandle> {
+async function registerParquetFiles(db: duckdb.AsyncDuckDB, storageMode: StorageMode) {
+  if (storageMode === 'chromium-opfs') {
+    try {
+      const [segHandle, bgHandle] = await Promise.all([
+        getOrFetchHandle(FILE_NAME, PARQUET_URL),
+        getOrFetchHandle(BG_FILE_NAME, BG_PARQUET_URL),
+      ]);
+      await db.registerFileHandle(FILE_NAME, segHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
+      await db.registerFileHandle(BG_FILE_NAME, bgHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
+      console.log('[db] parquet files registered from OPFS handles');
+      return;
+    } catch (e) {
+      console.warn('[db] OPFS parquet registration failed, using in-memory parquet buffers:', e);
+      await db.dropFiles([FILE_NAME, BG_FILE_NAME]).catch(() => null);
+    }
+  }
+
+  const [segmentBytes, blockGroupBytes] = await Promise.all([
+    fetchParquetBytes(PARQUET_URL),
+    fetchParquetBytes(BG_PARQUET_URL),
+  ]);
+  await db.registerFileBuffer(FILE_NAME, segmentBytes);
+  await db.registerFileBuffer(BG_FILE_NAME, blockGroupBytes);
+  console.log('[db] parquet files registered from fetched buffers');
+}
+
+async function fetchParquetBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+function supportsChromiumOPFS(): boolean {
+  if (!window.isSecureContext || !navigator.storage?.getDirectory) return false;
+
+  const nav = navigator as Navigator & {
+    userAgentData?: { brands?: Array<{ brand: string }> };
+  };
+  const brands = nav.userAgentData?.brands?.map((brand) => brand.brand).join(' ') || '';
+  if (/\b(Chromium|Google Chrome|Microsoft Edge|Opera)\b/.test(brands)) return true;
+
+  if (/\b(Firefox|FxiOS)\//.test(navigator.userAgent)) return false;
+  return /\b(Chrome|Chromium|Edg|OPR)\//.test(navigator.userAgent);
+}
+
+async function getOrFetchHandle(fileName: string, url: string): Promise<FileSystemFileHandle> {
   const root = await navigator.storage.getDirectory();
   const etagKey = `etag:${fileName}`;
 
-  const headRes = await fetch(url, { method: 'HEAD' });
-  const remoteEtag = headRes.headers.get('ETag');
+  let remoteEtag: string | null = null;
+  try {
+    const headRes = await fetch(url, { method: 'HEAD' });
+    remoteEtag = headRes.ok ? headRes.headers.get('ETag') : null;
+  } catch (e) {
+    console.warn(`[db] could not read parquet ETag for ${fileName}; refreshing cache`, e);
+  }
   const storedEtag = localStorage.getItem(etagKey);
 
   let handle: FileSystemFileHandle;
@@ -87,7 +142,12 @@ async function getOrFetch(fileName: string, url: string): Promise<FileSystemFile
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const writable = await handle.createWritable();
-    await res.body!.pipeTo(writable);
+    if (res.body) {
+      await res.body.pipeTo(writable);
+    } else {
+      await writable.write(await res.arrayBuffer());
+      await writable.close();
+    }
     if (remoteEtag) localStorage.setItem(etagKey, remoteEtag);
   }
 
