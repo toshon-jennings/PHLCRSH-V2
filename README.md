@@ -43,4 +43,13 @@ npm run build
 
 ## Notebook
 
-The notebook expects the local `roads` Python environment and the source data folders used during analysis. Census API access should be provided through `CENSUS_API_KEY`; the notebook does not hardcode an API key.
+The notebook expects the source data folders used during analysis. Census API access should be provided through `CENSUS_API_KEY`; the notebook does not hardcode an API key.
+
+To create a local Python environment:
+
+```sh
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m ipykernel install --user --name phlcrsh --display-name "PHLCRSH"
+```
