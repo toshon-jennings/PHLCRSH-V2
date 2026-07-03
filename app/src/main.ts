@@ -2,6 +2,7 @@ import './styles.css';
 import { initAboutPage } from './aboutPage';
 import { initDB } from './db';
 import { initMap } from './map';
+import { initAIAssistant } from './aiAssistant';
 
 const loadingEl = document.getElementById('loading-screen');
 const loadingMessageEl = document.getElementById('loading-message');
@@ -33,6 +34,10 @@ async function main() {
 
   setLoadingMessage('Drawing Philadelphia streets and block groups…');
   await initMap('map');
+  
+  console.log('[phlcrsh] Map ready. Initializing Safety Assistant…');
+  initAIAssistant();
+
   finishLoading();
 }
 

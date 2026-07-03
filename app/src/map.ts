@@ -11,6 +11,7 @@ import {
   loadBlockGroupPeerComparison,
   loadPhiladelphiaBoundary,
   loadSegmentFeatures,
+  loadVisibleLeaderboard,
   type SegmentProperties,
   type StoryFocalExample,
 } from './mapQueries';
@@ -32,14 +33,21 @@ function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const width = p.cartway_width_ft != null ? `${(+p.cartway_width_ft).toFixed(0)} ft` : '—';
   const grade = p.grade_range_smooth != null ? `${(p.grade_range_smooth * 100).toFixed(1)}%` : '—';
   const speed = p.maxspeed_final != null ? `${(+p.maxspeed_final).toFixed(0)} mph` : '—';
+  const riskIndex = p.risk_index != null ? p.risk_index.toFixed(2) : '—';
+  const adt = p.adt != null ? p.adt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
   return `<div class="seg-popup">
+    ${row('Risk Index', riskIndex)}
     ${row('Crashes', String(p.crash_count ?? '—'))}
+    ${row('ADT', adt)}
     ${row('Canopy', canopy)}
     ${row('Grade', grade)}
     ${row('Speed', speed)}
     ${row('Width', width)}
   </div>`;
 }
+
+let activeMap: maplibregl.Map | null = null;
+let allSegmentFeatures: any[] = [];
 
 export async function initMap(container: string) {
   const map = new maplibregl.Map({
@@ -49,6 +57,8 @@ export async function initMap(container: string) {
     zoom: 11,
   });
 
+  activeMap = map;
+
   await map.once('load');
 
   const [segmentFeatures, blockGroupFeatures, philadelphiaBoundary] = await Promise.all([
@@ -56,6 +66,7 @@ export async function initMap(container: string) {
     loadBlockGroupFeatures(),
     loadPhiladelphiaBoundary(),
   ]);
+  allSegmentFeatures = segmentFeatures;
   addMapSourcesAndLayers(map, segmentFeatures, blockGroupFeatures, philadelphiaBoundary);
 
   let hoveredId: number | string | null = null;
@@ -195,6 +206,102 @@ export async function initMap(container: string) {
 
   setupGroup(INTERACTION_LAYER_GROUP);
   setupGroup(BLOCK_GROUP_LAYER_GROUP);
+
+  // Independent overlays
+  const INFRASTRUCTURE_OVERLAYS = [
+    { toggleId: 'toggle-bike-lanes', layerId: 'bike-lanes', legendId: 'legend-bike-lanes' },
+    { toggleId: 'toggle-signals', layerId: 'signals', legendId: 'legend-signals' },
+  ];
+
+  const EQUITY_OVERLAYS = [
+    { toggleId: 'toggle-heat', layerId: 'heat', legendId: 'legend-heat' },
+    { toggleId: 'toggle-school-zones', layerId: 'school-zones', legendId: 'legend-school-zones' },
+  ];
+
+  function setupOverlays(group: typeof INFRASTRUCTURE_OVERLAYS) {
+    const setVisible = (layerId: string, visible: boolean) =>
+      map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+
+    group.forEach(({ toggleId, layerId, legendId }) => {
+      const el = document.getElementById(toggleId) as HTMLInputElement | null;
+      const legendEl = document.getElementById(legendId)!;
+      if (el) {
+        setVisible(layerId, el.checked);
+        if (el.checked) {
+          renderLegend(legendEl, layerId);
+        }
+      }
+    });
+
+    group.forEach(({ toggleId, layerId, legendId }) => {
+      const legendEl = document.getElementById(legendId)!;
+      document.getElementById(toggleId)?.addEventListener('change', (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        setVisible(layerId, checked);
+        if (checked) {
+          renderLegend(legendEl, layerId);
+        } else {
+          renderLegend(legendEl, null);
+        }
+      });
+    });
+  }
+
+  setupOverlays(INFRASTRUCTURE_OVERLAYS);
+  setupOverlays(EQUITY_OVERLAYS);
+
+  // Phase 1: KSI toggle filter
+  document.getElementById('toggle-ksi')?.addEventListener('change', (e) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    const filter = checked 
+      ? ['any', ['>', ['coalesce', ['get', 'has_fatality'], 0], 0], ['>', ['coalesce', ['get', 'has_severe_injury'], 0], 0]]
+      : ['has', 'seg_id'];
+    map.setFilter('segments-line', filter as any);
+  });
+
+  // Phase 3: Temporal & Environmental filters
+  function updateSegmentColor() {
+    const timeSelect = document.getElementById('filter-time-of-day') as HTMLSelectElement | null;
+    const weatherSelect = document.getElementById('filter-weather') as HTMLSelectElement | null;
+    if (!timeSelect || !weatherSelect) return;
+
+    const time = timeSelect.value;
+    const weather = weatherSelect.value;
+
+    let colName = 'crash_count';
+    if (time === 'all' && weather === 'all') {
+      colName = 'crash_count';
+    } else if (time !== 'all' && weather === 'all') {
+      colName = `crash_count_${time}`;
+    } else if (time === 'all' && weather !== 'all') {
+      colName = `crash_count_${weather}`;
+    } else {
+      colName = `crash_count_${time}_${weather}`;
+    }
+
+    const riskIndexExpr = [
+      'case',
+      ['all', ['>', ['coalesce', ['get', 'adt'], 0], 0], ['>', ['coalesce', ['get', 'length'], 0], 0]],
+      ['/', ['*', ['coalesce', ['get', colName], 0], 1000000.0], ['*', ['get', 'adt'], ['get', 'length']]],
+      0.0
+    ];
+
+    map.setPaintProperty('segments-line', 'line-color', [
+      'step', riskIndexExpr as any,
+      '#ffffff',
+      0.1, '#fee5d9',
+      0.5, '#fcae91',
+      2.0, '#fb6a4a',
+      10.0, '#de2d26',
+      50.0, '#a50f15',
+    ] as any);
+
+    // Update leaderboard when filters change!
+    updateLeaderboard();
+  }
+
+  document.getElementById('filter-time-of-day')?.addEventListener('change', updateSegmentColor);
+  document.getElementById('filter-weather')?.addEventListener('change', updateSegmentColor);
 
   function syncMobileSidebarButton() {
     const sidebar = document.getElementById('sidebar');
@@ -423,6 +530,7 @@ export async function initMap(container: string) {
       setSidebarMode('story', chip);
     } else {
       setSidebarMode('idle');
+      setTimeout(updateLeaderboard, 50);
     }
   }
 
@@ -432,6 +540,7 @@ export async function initMap(container: string) {
     activeChipId = null;
     document.querySelectorAll('.chip').forEach((el) => el.classList.remove('active'));
     setSidebarMode('idle');
+    setTimeout(updateLeaderboard, 50);
   });
 
   window.addEventListener('keydown', (e) => {
@@ -499,11 +608,16 @@ export async function initMap(container: string) {
     const deltaCls = delta != null && Math.abs(delta) > 3 ? (delta > 0 ? ' warn' : ' good') : '';
 
     const rows: [string, string, string][] = [
+      ['Risk Index', p.risk_index != null ? p.risk_index.toFixed(2) : '—', ''],
       ['Crashes', fmt(p.crash_count, ''), ''],
+      ['ADT', p.adt != null ? p.adt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', ''],
+      ['VMT (Daily)', p.vmt != null ? p.vmt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', ''],
       ['Canopy', fmt(p.canopy_pct != null ? p.canopy_pct * 100 : null, '%'), ''],
       ['Grade', fmt(p.grade_range_smooth != null ? p.grade_range_smooth * 100 : null, '%', 1), ''],
       ['Speed', fmt(p.maxspeed_final, ' mph'), ''],
       ['Width (calc.)', fmt(p.cartway_width_ft, ' ft'), ''],
+      ['Bike Lanes', p.bike_infra_type ?? 'None', ''],
+      ['Int. Control', p.intersection_control ?? 'Uncontrolled', ''],
     ];
     if (deltaStr) rows.push([
       'Width (state)',
@@ -524,7 +638,7 @@ export async function initMap(container: string) {
         <button type="button" id="mobile-pinned-close">Close</button>
       </div>
       ${rows.map(([label, val, cls], idx) =>
-        `<div class="stat-row${cls}${idx < 5 ? ' peek-visible' : ' peek-extra'}"><span>${label}</span><strong>${val}</strong></div>`
+        `<div class="stat-row${cls}${idx < 8 ? ' peek-visible' : ' peek-extra'}"><span>${label}</span><strong>${val}</strong></div>`
       ).join('')}
       <div class="peer-comparison" id="peer-comparison">
         <h4>Loading block-group context…</h4>
@@ -576,6 +690,96 @@ export async function initMap(container: string) {
   renderChipList((chip) => activateChip(chip, map, setSidebarMode));
   setupCollapsiblePanels();
 
+  // Dynamic High-Risk Corridor Leaderboard
+  async function updateLeaderboard() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar || !sidebar.classList.contains('mode-idle')) return;
+
+    const leaderboardEl = document.getElementById('leaderboard-list');
+    if (!leaderboardEl) return;
+
+    const timeSelect = document.getElementById('filter-time-of-day') as HTMLSelectElement | null;
+    const weatherSelect = document.getElementById('filter-weather') as HTMLSelectElement | null;
+    const time = timeSelect?.value || 'all';
+    const weather = weatherSelect?.value || 'all';
+
+    let colName = 'crash_count';
+    if (time === 'all' && weather === 'all') {
+      colName = 'crash_count';
+    } else if (time !== 'all' && weather === 'all') {
+      colName = `crash_count_${time}`;
+    } else if (time === 'all' && weather !== 'all') {
+      colName = `crash_count_${weather}`;
+    } else {
+      colName = `crash_count_${time}_${weather}`;
+    }
+
+    const bounds = map.getBounds();
+    try {
+      const entries = await loadVisibleLeaderboard(
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+        colName
+      );
+
+      if (entries.length === 0) {
+        leaderboardEl.innerHTML = '<div style="font-size: 11px; color: var(--color-muted); padding: 8px 0; text-align: center;">No high-risk segments in current view.</div>';
+        return;
+      }
+
+      leaderboardEl.innerHTML = entries.map(entry => {
+        const name = [entry.st_name, entry.st_type].filter(Boolean).join(' ') || 'Unnamed Segment';
+        return `
+          <div class="leaderboard-item" data-seg-id="${entry.seg_id}" style="padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: background 0.12s;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+              <span style="font-size: 11.5px; font-weight: 600; color: var(--color-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${name}</span>
+              <span style="font-size: 11px; font-weight: bold; color: var(--color-warn); white-space: nowrap;">${entry.risk_index.toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 9.5px; color: var(--color-secondary); gap: 8px;">
+              <span style="text-transform: capitalize;">${entry.road_class || 'Local'}</span>
+              <span style="white-space: nowrap;">${entry.crash_count} crashes / ${entry.adt ? entry.adt.toLocaleString() : '—'} ADT</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      leaderboardEl.querySelectorAll('.leaderboard-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+          const target = e.currentTarget as HTMLElement;
+          const segId = Number(target.getAttribute('data-seg-id'));
+          const feature = segmentFeatures.find(f => f.properties.seg_id === segId);
+          if (feature) {
+            const bounds = new maplibregl.LngLatBounds();
+            if (feature.geometry.type === 'LineString') {
+              feature.geometry.coordinates.forEach((coord: any) => bounds.extend(coord));
+            } else if (feature.geometry.type === 'MultiLineString') {
+              feature.geometry.coordinates.forEach((line: any) => line.forEach((coord: any) => bounds.extend(coord)));
+            }
+            map.fitBounds(bounds, { padding: 120, maxZoom: 16 });
+
+            if (pinnedSegId !== null && pinnedSegId !== segId) {
+              map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
+            }
+            pinnedSegId = segId;
+            map.setFeatureState({ source: 'segments', id: segId }, { pinned: true });
+            setSidebarMode('pinned');
+            renderPinnedStats(feature.properties);
+            runPeerQuery(feature.properties);
+            showMobilePinnedPeek();
+          }
+        });
+      });
+    } catch (err) {
+      console.error('[leaderboard] failed to update:', err);
+    }
+  }
+
+  // Update on map moves or transitions
+  map.on('moveend', updateLeaderboard);
+  map.once('idle', updateLeaderboard); // Initial load when map finishes loading initial viewport
+
   return map;
 }
 
@@ -596,4 +800,63 @@ function firstLineCoordinates(coords: any): any[] {
     if (line.length) return line;
   }
   return [];
+}
+
+let flashInterval: any = null;
+export function highlightAndZoomToSegments(segIds: number[]) {
+  if (!activeMap) return;
+
+  if (flashInterval) {
+    clearInterval(flashInterval);
+    flashInterval = null;
+  }
+
+  if (segIds.length === 0) {
+    activeMap.setFilter('segments-ai-highlight', ['==', ['get', 'seg_id'], -1]);
+    return;
+  }
+
+  // Set filter using standard MapLibre match syntax
+  activeMap.setFilter('segments-ai-highlight', ['match', ['get', 'seg_id'], segIds, true, false]);
+  activeMap.setLayoutProperty('segments-ai-highlight', 'visibility', 'visible');
+
+  // Flash animation: cycle opacity between 0.3 and 1.0 a few times
+  let opacity = 1.0;
+  let count = 0;
+  activeMap.setPaintProperty('segments-ai-highlight', 'line-opacity', opacity);
+
+  flashInterval = setInterval(() => {
+    if (!activeMap) return;
+    opacity = opacity === 1.0 ? 0.25 : 1.0;
+    activeMap.setPaintProperty('segments-ai-highlight', 'line-opacity', opacity);
+    count++;
+    if (count >= 6) {
+      clearInterval(flashInterval);
+      flashInterval = null;
+      activeMap.setPaintProperty('segments-ai-highlight', 'line-opacity', 0.95);
+    }
+  }, 250);
+
+  // Zoom to fit bounds of these segments
+  const bounds = new maplibregl.LngLatBounds();
+  let hasFeatures = false;
+  segIds.forEach(id => {
+    const feature = allSegmentFeatures.find(f => f.properties.seg_id === id);
+    if (feature && feature.geometry) {
+      hasFeatures = true;
+      if (feature.geometry.type === 'LineString') {
+        feature.geometry.coordinates.forEach((coord: any) => bounds.extend(coord));
+      } else if (feature.geometry.type === 'MultiLineString') {
+        feature.geometry.coordinates.forEach((line: any) => line.forEach((coord: any) => bounds.extend(coord)));
+      }
+    }
+  });
+
+  if (hasFeatures) {
+    activeMap.fitBounds(bounds, {
+      padding: { top: 80, bottom: 80, left: 80, right: 80 },
+      maxZoom: 16,
+      duration: 1500
+    });
+  }
 }

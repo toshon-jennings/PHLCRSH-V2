@@ -18,4 +18,12 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        main: './index.html',
+        notebook: './notebook.html',
+      },
+    },
+  },
 });

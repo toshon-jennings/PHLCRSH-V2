@@ -59,16 +59,20 @@ function renderMarkdown(markdown: string) {
 }
 
 function renderInline(value: string) {
-  return escapeHtml(value).replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    (_match, text: string, href: string) => {
-      const safeHref = href.replace(/&amp;/g, '&');
-      const targetAttrs = EXTERNAL_LINK_RE.test(safeHref)
-        ? ' target="_blank" rel="noreferrer"'
-        : '';
-      return `<a href="${safeHref}"${targetAttrs}>${text}</a>`;
-    },
-  );
+  return escapeHtml(value)
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      (_match, text: string, href: string) => {
+        const safeHref = href.replace(/&amp;/g, '&');
+        const targetAttrs = EXTERNAL_LINK_RE.test(safeHref)
+          ? ' target="_blank" rel="noreferrer"'
+          : '';
+        return `<a href="${safeHref}"${targetAttrs}>${text}</a>`;
+      },
+    )
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>');
 }
 
 function escapeHtml(value: string) {
