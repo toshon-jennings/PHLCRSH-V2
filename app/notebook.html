@@ -448,7 +448,7 @@
         <a href="#intro" class="active">1. Introduction</a>
         <a href="#curb-width">2. Curbs & Cartway Widths</a>
         <a href="#grade-sampling">3. Elevation & Grade Sampling</a>
-        <a href="#exposure">4. Exposure Baselining</a>
+        <a href="#exposure">4. Crash Density Baselining</a>
         <a href="#infra-equity">5. Right-of-Way & Equity</a>
         <a href="#regression">6. Negative Binomial Modeling</a>
         <a href="#conclusions">7. Conclusions & Handoff</a>
@@ -466,7 +466,7 @@
     <main class="notebook-content">
       <header class="notebook-header">
         <h1>Philadelphia Environmental Safety Analysis</h1>
-        <p class="subtitle">A street-segment study of crash risk exposure, micro-infrastructure, and neighborhood demographics.</p>
+        <p class="subtitle">A street-segment study of crash density, micro-infrastructure, and neighborhood demographics.</p>
         
         <div class="credits-pill-row">
           <div class="credits-pill">
@@ -487,7 +487,7 @@
           This study examines how street design (cartway width, speed, micro-infrastructure) and environmental features (tree canopy, elevation grade) correlate with automobile crash frequencies and severities across Philadelphia's street segments. 
         </p>
         <p>
-          In our version, we expand the original methodology to focus on <strong>risk-exposure rates</strong> rather than simple counts, using measured PennDOT AADT where available and class-based exposure estimates elsewhere, while layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice.
+          In our version, we expand the original methodology to focus on <strong>length-normalized crash rates</strong> rather than simple counts, while layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice. We deliberately do not estimate per-segment traffic volume: Philadelphia has no reliable AADT for most local streets (see Part 4), so a rate normalized by segment length is the honest metric available.
         </p>
         
         <div class="code-cell">
@@ -590,55 +590,17 @@ def calculate_grade(segment, dem_raster):
       <section id="exposure" class="section-card">
         <h2>
           <span class="section-badge">Part 4</span>
-          Risk-Exposure Baselining
+          Crash Density Baselining
         </h2>
         <p>
-          Analyzing simple crash counts penalizes long, heavily traveled segments. We normalized crash rates to compute a true <strong>Risk Index</strong> representing crash frequencies per million Daily Vehicle-Feet traveled:
+          Analyzing simple crash counts penalizes long segments over short ones. We normalize by segment length to compute <strong>Crash Density</strong> — crashes per 1,000 ft of segment:
         </p>
         <div class="formula-block">
-          <div class="formula">Risk Index = (Crashes × 1,000,000) / (Exposure Volume × Segment Length)</div>
+          <div class="formula">Crash Density = (Crashes × 1,000) / Segment Length (ft)</div>
         </div>
         <p>
-          Measured AADT is used only where a reliable PennDOT state-road value is available. DVRPC traffic-count volumes remain raw context because the service includes short-duration, bicycle, pedestrian, and class-count records. For streets without measured AADT, we apply class-based exposure estimates:
+          A prior version of this metric tried to normalize by traffic volume (AADT) instead of length, computing a "Risk Index" of crashes per million vehicle-miles. That required a daily traffic count for every segment, which Philadelphia does not have: PennDOT's <code>state_aadt</code> only covers state-owned roads (a small minority of segments in this dataset), and DVRPC's traffic-count service mixes 15-minute, bicycle, pedestrian, and class-count records, so its <code>volume</code> field is not a reliable AADT. The missing values were filled with a road-class lookup table — e.g. every "Local" segment got the same assumed 1,000 vehicles/day regardless of the actual street — and displayed as an "AADT est." That number described the road's functional class, not the specific segment, so it has been removed rather than patched. Crash Density uses only measured quantities (crash counts, segment length) and makes no traffic-volume claim.
         </p>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Road Class</th>
-                <th>Classification</th>
-                <th>Estimated Daily Exposure</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Class 1</strong></td>
-                <td>Expressway</td>
-                <td>50,000</td>
-              </tr>
-              <tr>
-                <td><strong>Class 2</strong></td>
-                <td>Major Arterial</td>
-                <td>15,000</td>
-              </tr>
-              <tr>
-                <td><strong>Class 3</strong></td>
-                <td>Minor Arterial</td>
-                <td>7,000</td>
-              </tr>
-              <tr>
-                <td><strong>Class 4</strong></td>
-                <td>Collector</td>
-                <td>3,000</td>
-              </tr>
-              <tr>
-                <td><strong>Class 5</strong></td>
-                <td>Local / Residential</td>
-                <td>1,000</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </section>
       
       <section id="infra-equity" class="section-card">
@@ -753,7 +715,7 @@ snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre
           This analysis was compiled into clean GeoParquet files (<code>philly_segments.parquet</code>) and handed off to the browser application. Using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, we render these analytical findings in real-time, letting users click any street segment in Philadelphia to inspect its local variables and see live DuckDB queries execute directly in their browser console.
         </p>
         <p style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: var(--space-16); font-size: 13px; color: var(--color-muted); margin-top: var(--space-24);">
-          <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: #cccccc; text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Phases 1–4 exposure rates, snapped bike network, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, and visible bounding box leaderboard) was developed collaboratively by <a href="https://github.com/toschon-jennings" target="_blank" style="color: #cccccc; text-decoration: none;">Toshon Jennings</a> and Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: #cccccc; text-decoration: none;">Antigravity</a>.
+          <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: #cccccc; text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Phases 1–4 crash density rates, snapped bike network, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, and visible bounding box leaderboard) was developed collaboratively by <a href="https://github.com/toschon-jennings" target="_blank" style="color: #cccccc; text-decoration: none;">Toshon Jennings</a> and Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: #cccccc; text-decoration: none;">Antigravity</a>.
         </p>
       </section>
     </main>

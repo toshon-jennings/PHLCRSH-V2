@@ -27,19 +27,6 @@ const SEGMENT_COLUMN_DEFAULTS = [
   { name: 'roadway_open_request_count', expr: '0::INTEGER' },
 ];
 
-const CLASS_EXPOSURE_ESTIMATE_SQL = `
-CASE TRY_CAST(class AS INTEGER)
-  WHEN 1 THEN 50000.0
-  WHEN 2 THEN 15000.0
-  WHEN 3 THEN 7000.0
-  WHEN 4 THEN 3000.0
-  WHEN 5 THEN 1000.0
-  WHEN 9 THEN 500.0
-  WHEN 10 THEN 500.0
-  ELSE 1000.0
-END
-`;
-
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
 
@@ -101,42 +88,27 @@ async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
     .filter(({ name }) => !columns.has(name))
     .map(({ name, expr }) => `${expr} AS ${name}`);
   const defaultSelect = defaults.length ? `, ${defaults.join(', ')}` : '';
-  const excludedColumns = ['adt', 'vmt', 'risk_index', 'has_aadt', 'exposure_adt', 'exposure_source'];
-  if (columns.has('adt_source')) excludedColumns.push('adt_source');
-  const excludeSelect = `* EXCLUDE (${excludedColumns.join(', ')})`;
+  // Older parquet builds baked in a road-class AADT guess (adt/vmt/risk_index/
+  // has_aadt/adt_source): the same constant for every segment of a given class,
+  // presented as if it were a measurement of that specific street. It wasn't.
+  // Strip those columns and compute an honest crash_density instead, using only
+  // real, measured columns (crash_count, length).
+  const staleColumns = ['adt', 'vmt', 'risk_index', 'has_aadt', 'adt_source', 'crash_density']
+    .filter((name) => columns.has(name));
+  const baseSelect = staleColumns.length ? `* EXCLUDE (${staleColumns.join(', ')})` : '*';
   await conn.query(`
     CREATE OR REPLACE VIEW segments AS
     WITH base AS (
-      SELECT *${defaultSelect} FROM segments_raw
-    ),
-    exposure AS (
-      SELECT
-        *,
-        CASE
-          WHEN TRY_CAST(state_aadt AS DOUBLE) > 0 THEN TRY_CAST(state_aadt AS DOUBLE)
-          ELSE ${CLASS_EXPOSURE_ESTIMATE_SQL}
-        END AS exposure_adt,
-        CASE
-          WHEN TRY_CAST(state_aadt AS DOUBLE) > 0 THEN 'state_aadt'
-          ELSE 'class_estimate'
-        END AS exposure_source
-      FROM base
+      SELECT ${baseSelect}${defaultSelect} FROM segments_raw
     )
     SELECT
-      ${excludeSelect},
-      exposure_adt AS adt,
-      exposure_source AS adt_source,
-      exposure_adt * TRY_CAST(length AS DOUBLE) / 5280.0 AS vmt,
+      *,
       CASE
-        WHEN exposure_adt > 0 AND TRY_CAST(length AS DOUBLE) > 0
-        THEN TRY_CAST(crash_count AS DOUBLE) * 1000000.0 / (exposure_adt * TRY_CAST(length AS DOUBLE))
+        WHEN TRY_CAST(length AS DOUBLE) > 0
+        THEN TRY_CAST(crash_count AS DOUBLE) * 1000.0 / TRY_CAST(length AS DOUBLE)
         ELSE 0.0
-      END AS risk_index,
-      CASE
-        WHEN exposure_source = 'state_aadt' THEN true
-        ELSE false
-      END AS has_aadt
-    FROM exposure
+      END AS crash_density
+    FROM base
   `);
 }
 
