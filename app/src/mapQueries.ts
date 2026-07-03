@@ -15,11 +15,8 @@ export type SegmentProperties = {
   road_class: string | null;
   state_divisor_type: string | null;
 
-  // Phase 1: Exposure & Severity Baselining
-  adt: number | null;
-  adt_source: string | null;
-  vmt: number | null;
-  risk_index: number | null;
+  // Phase 1: Severity & Density Baselining
+  crash_density: number | null;
   has_fatality: number | null;
   has_severe_injury: number | null;
   length: number | null;
@@ -113,10 +110,7 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
     st_type,
     class                               AS road_class,
     state_divisor_type,
-    CAST(adt AS FLOAT)                  AS adt,
-    adt_source,
-    CAST(vmt AS FLOAT)                  AS vmt,
-    CAST(risk_index AS FLOAT)           AS risk_index,
+    CAST(crash_density AS FLOAT)         AS crash_density,
     CAST(length AS FLOAT)               AS length,
     CAST(has_fatality AS INTEGER)       AS has_fatality,
     CAST(has_severe_injury AS INTEGER)  AS has_severe_injury,
@@ -158,10 +152,7 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
       st_type: r.st_type,
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
-      adt: r.adt,
-      adt_source: r.adt_source,
-      vmt: r.vmt,
-      risk_index: r.risk_index,
+      crash_density: r.crash_density,
       length: r.length,
       has_fatality: r.has_fatality,
       has_severe_injury: r.has_severe_injury,
@@ -275,10 +266,7 @@ function rowToStoryFocalExample(r: any): StoryFocalExample {
       st_type: r.st_type,
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
-      adt: r.adt,
-      adt_source: r.adt_source,
-      vmt: r.vmt,
-      risk_index: r.risk_index,
+      crash_density: r.crash_density,
       length: r.length,
       has_fatality: r.has_fatality,
       has_severe_injury: r.has_severe_injury,
@@ -323,10 +311,7 @@ export async function loadStoryFocalExamples(storyId: string): Promise<StoryFoca
     st_type,
     class                               AS road_class,
     state_divisor_type,
-    CAST(adt AS FLOAT)                  AS adt,
-    adt_source,
-    CAST(vmt AS FLOAT)                  AS vmt,
-    CAST(risk_index AS FLOAT)           AS risk_index,
+    CAST(crash_density AS FLOAT)         AS crash_density,
     CAST(length AS FLOAT)               AS length,
     CAST(has_fatality AS INTEGER)       AS has_fatality,
     CAST(has_severe_injury AS INTEGER)  AS has_severe_injury,
@@ -466,10 +451,16 @@ export type LeaderboardEntry = {
   st_type: string | null;
   road_class: string | null;
   crash_count: number;
-  risk_index: number;
-  adt: number;
-  adt_source: string | null;
+  crash_density: number;
+  length: number;
 };
+
+// Segments shorter than this are usually intersection stubs. A handful of
+// crashes on a ~50ft stub produces a huge crashes-per-foot rate that has
+// nothing to do with the street being dangerous — it's just a tiny
+// denominator. Excluding them keeps the leaderboard to corridors long enough
+// for a density figure to mean something.
+const LEADERBOARD_MIN_LENGTH_FT = 150;
 
 export async function loadVisibleLeaderboard(
   west: number,
@@ -485,15 +476,15 @@ export async function loadVisibleLeaderboard(
       st_type,
       class                               AS road_class,
       CAST(${colName} AS INTEGER)         AS crash_count,
-      CASE WHEN adt > 0 AND length > 0
-           THEN (CAST(${colName} AS FLOAT) * 1000000.0) / (CAST(adt AS FLOAT) * CAST(length AS FLOAT))
-           ELSE 0.0 END                   AS risk_index,
-      CAST(adt AS FLOAT)                  AS adt,
-      adt_source
+      CAST(length AS FLOAT)               AS length,
+      CASE WHEN length > 0
+           THEN (CAST(${colName} AS FLOAT) * 1000.0) / CAST(length AS FLOAT)
+           ELSE 0.0 END                   AS crash_density
     FROM segments
     WHERE ST_Intersects(geometry, ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}))
       AND ${colName} > 0
-    ORDER BY risk_index DESC
+      AND length >= ${LEADERBOARD_MIN_LENGTH_FT}
+    ORDER BY crash_density DESC
     LIMIT 10
   `);
 
@@ -503,8 +494,7 @@ export async function loadVisibleLeaderboard(
     st_type: r.st_type,
     road_class: r.road_class,
     crash_count: r.crash_count,
-    risk_index: r.risk_index,
-    adt: r.adt,
-    adt_source: r.adt_source,
+    crash_density: r.crash_density,
+    length: r.length,
   }));
 }

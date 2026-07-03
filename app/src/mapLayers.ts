@@ -39,11 +39,11 @@ export const BLOCK_GROUP_LAYER_GROUP: LayerGroup = [
 export const LEGENDS: Record<string, Legend> = {
   'segments-line': { kind: 'steps', stops: [
     { color: '#ffffff', label: '0' },
-    { color: '#fee5d9', label: '0.1' },
-    { color: '#fcae91', label: '0.5' },
-    { color: '#fb6a4a', label: '2.0' },
-    { color: '#de2d26', label: '10.0' },
-    { color: '#a50f15', label: '50.0+' },
+    { color: '#fee5d9', label: '1' },
+    { color: '#fcae91', label: '3' },
+    { color: '#fb6a4a', label: '8' },
+    { color: '#de2d26', label: '20' },
+    { color: '#a50f15', label: '50+' },
   ]},
   'canopy-pct': { kind: 'steps', stops: [
     { color: '#ffffff', label: '0%' },
@@ -198,13 +198,13 @@ export function addMapSourcesAndLayers(
     source: 'segments',
     paint: {
       'line-color': [
-        'step', ['coalesce', ['get', 'risk_index'], 0],
+        'step', ['coalesce', ['get', 'crash_density'], 0],
         '#ffffff',
-        0.1, '#fee5d9',
-        0.5, '#fcae91',
-        2.0, '#fb6a4a',
-        10.0, '#de2d26',
-        50.0, '#a50f15',
+        1, '#fee5d9',
+        3, '#fcae91',
+        8, '#fb6a4a',
+        20, '#de2d26',
+        50, '#a50f15',
       ],
       'line-width': [
         'step', ['coalesce', ['get', 'cartway_width_ft'], 0],

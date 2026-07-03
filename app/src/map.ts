@@ -26,13 +26,6 @@ import {
   type LayerGroup,
 } from './mapLayers';
 
-function formatExposureValue(value: number | null | undefined, source: string | null | undefined) {
-  const formatted = value != null ? value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
-  return source === 'state_aadt'
-    ? { label: 'AADT', value: formatted }
-    : { label: 'Exposure est.', value: formatted === '—' ? '—' : `${formatted} est.` };
-}
-
 function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const row = (label: string, value: string) =>
     `<div class="seg-row"><span>${label}</span><strong>${value}</strong></div>`;
@@ -40,14 +33,12 @@ function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const width = p.cartway_width_ft != null ? `${(+p.cartway_width_ft).toFixed(0)} ft` : '—';
   const grade = p.grade_range_smooth != null ? `${(p.grade_range_smooth * 100).toFixed(1)}%` : '—';
   const speed = p.maxspeed_final != null ? `${(+p.maxspeed_final).toFixed(0)} mph` : '—';
-  const riskIndex = p.risk_index != null ? p.risk_index.toFixed(2) : '—';
-  const exposure = formatExposureValue(p.adt, p.adt_source);
+  const crashDensity = p.crash_density != null ? p.crash_density.toFixed(1) : '—';
   const defects = p.roadway_defect_count != null ? String(p.roadway_defect_count) : '—';
   return `<div class="seg-popup">
-    ${row('Risk Index', riskIndex)}
     ${row('Crashes', String(p.crash_count ?? '—'))}
+    ${row('Crash Density (/1000ft)', crashDensity)}
     ${row('311 Defects', defects)}
-    ${row(exposure.label, exposure.value)}
     ${row('Canopy', canopy)}
     ${row('Grade', grade)}
     ${row('Speed', speed)}
@@ -616,13 +607,11 @@ export async function initMap(container: string) {
     const deltaStr = delta != null
       ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ft vs state` : null;
     const deltaCls = delta != null && Math.abs(delta) > 3 ? (delta > 0 ? ' warn' : ' good') : '';
-    const exposure = formatExposureValue(p.adt, p.adt_source);
 
     const rows: [string, string, string][] = [
-      ['Risk Index', p.risk_index != null ? p.risk_index.toFixed(2) : '—', ''],
       ['Crashes', fmt(p.crash_count, ''), ''],
-      [exposure.label, exposure.value, ''],
-      ['VMT (Daily)', p.vmt != null ? p.vmt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', ''],
+      ['Crash Density (/1000ft)', fmt(p.crash_density, '', 1), ''],
+      ['Length', fmt(p.length, ' ft'), ''],
       ['Canopy', fmt(p.canopy_pct != null ? p.canopy_pct * 100 : null, '%'), ''],
       ['Grade', fmt(p.grade_range_smooth != null ? p.grade_range_smooth * 100 : null, '%', 1), ''],
       ['Speed', fmt(p.maxspeed_final, ' mph'), ''],
@@ -738,22 +727,21 @@ export async function initMap(container: string) {
       );
 
       if (entries.length === 0) {
-        leaderboardEl.innerHTML = '<div style="font-size: 11px; color: var(--color-muted); padding: 8px 0; text-align: center;">No high-risk segments in current view.</div>';
+        leaderboardEl.innerHTML = '<div style="font-size: 11px; color: var(--color-muted); padding: 8px 0; text-align: center;">No qualifying segments in current view.</div>';
         return;
       }
 
       leaderboardEl.innerHTML = entries.map(entry => {
         const name = [entry.st_name, entry.st_type].filter(Boolean).join(' ') || 'Unnamed Segment';
-        const exposure = formatExposureValue(entry.adt, entry.adt_source);
         return `
           <div class="leaderboard-item" data-seg-id="${entry.seg_id}" style="padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: background 0.12s;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
               <span style="font-size: 11.5px; font-weight: 600; color: var(--color-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${name}</span>
-              <span style="font-size: 11px; font-weight: bold; color: var(--color-warn); white-space: nowrap;">${entry.risk_index.toFixed(2)}</span>
+              <span style="font-size: 11px; font-weight: bold; color: var(--color-warn); white-space: nowrap;">${entry.crash_density.toFixed(1)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 9.5px; color: var(--color-secondary); gap: 8px;">
               <span style="text-transform: capitalize;">${entry.road_class || 'Local'}</span>
-              <span style="white-space: nowrap;">${entry.crash_count} crashes / ${exposure.value}</span>
+              <span style="white-space: nowrap;">${entry.crash_count} crashes / ${entry.length.toFixed(0)} ft</span>
             </div>
           </div>
         `;

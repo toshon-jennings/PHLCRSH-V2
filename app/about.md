@@ -17,9 +17,9 @@ The map is not a causal model. It is a browser-based analytical viewer for compa
 
 ## Diagnostic Engine & Feature Expansion (Phases 1–4)
 
-In July 2026, the application was upgraded from a static count viewer into a dynamic, risk-exposure, and multi-modal safety diagnostic engine:
+In July 2026, the application was upgraded from a static count viewer into a dynamic, multi-modal safety diagnostic engine:
 
-- **Phase 1: Exposure & Severity Baselining**: Shifted metrics from flat crash counts to exposure-normalized risk rates. The app computes a normalized Risk Index per segment representing crashes per million Daily Vehicle-Feet, using measured PennDOT AADT when available and functional-class exposure estimates otherwise. DVRPC traffic-count volumes are retained as raw context, not treated as AADT. It also exposes binary flags for segments with high-severity outcomes (`has_fatality` and `has_severe_injury`), allowing users to isolate Fatal & Severe Only (KSI) corridors.
+- **Phase 1: Severity & Density Baselining**: Shifted metrics from flat crash counts to length-normalized Crash Density (crashes per 1,000 ft of segment). Philadelphia has no reliable per-segment traffic volume for most streets — PennDOT's AADT only covers state-owned roads, and DVRPC's counts mix in bicycle, pedestrian, and short-duration records — so the app does not attempt to estimate one. An earlier version filled the gap with a road-class lookup table (e.g. "Local roads = 1,000 vehicles/day") and displayed it as if it were a measured "AADT est." for that specific street; it was removed because it was the same constant for every segment of a class, not a real property of any one street. It also exposes binary flags for segments with high-severity outcomes (`has_fatality` and `has_severe_injury`), allowing users to isolate Fatal & Severe Only (KSI) corridors.
 - **Phase 2: Micro-Infrastructure & Right-of-Way**: Integrated the City of Philadelphia's Bike Network, snapping bike facilities to centerline midpoints and classifying them into Protected, Painted, or Sharrow tiers. Also categorized intersections into Signalized, Stop-Controlled, or Uncontrolled types.
 - **Phase 3: Temporal & Environmental Dynamics**: Implemented dynamic day/night and clear/wet crash slices. Streetlight density (Street Poles counts within a 50ft buffer) is mapped as a proxy for nighttime illumination. Sun-glare prone corridors are flagged automatically using geometric bearing calculations for segments running directly East-West (azimuth $75^\circ\text{–}105^\circ$ or $255^\circ\text{–}285^\circ$).
 - **Phase 4: Equity & Climate Vulnerability Overlays**: Joined census block group geometry to School District of Philadelphia facility points and the CDC-aligned Heat Vulnerability Index (HVI) tracts. Segments intersecting school zones (500ft buffer) or high heat vulnerability tracts (HVI $\ge 4$) are flagged for equity overlay analysis.
@@ -28,7 +28,7 @@ In July 2026, the application was upgraded from a static count viewer into a dyn
 ## Credits & Contributions
 
 - **Original Application**: Created and developed by [Ben Polinsky](https://github.com/ben-polinsky) as an exploratory analysis tool linking spatial geometry and PennDOT crashes. View the original [PHLCRSH GitHub repository](https://github.com/benpolinsky/PHLCRSH).
-- **V2 Diagnostic Engine**: Extended collaboratively by [Toshon Jennings](https://github.com/toschon-jennings) and **Antigravity** (Google DeepMind's AI coding assistant). This upgrade built out the multi-dimensional exposure engine, snapped infrastructure indexes, daylight/weather slices, solar-glare vectors, school/heat overlays, and the visible viewport high-risk corridor leaderboard.
+- **V2 Diagnostic Engine**: Extended collaboratively by [Toshon Jennings](https://github.com/toschon-jennings) and **Antigravity** (Google DeepMind's AI coding assistant). This upgrade built out the crash density & severity metrics, snapped infrastructure indexes, daylight/weather slices, solar-glare vectors, school/heat overlays, and the visible viewport crash-density leaderboard.
 
 ## Data Sources
 

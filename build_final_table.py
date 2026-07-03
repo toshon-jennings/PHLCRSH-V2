@@ -21,8 +21,11 @@ Final schema (one row per driveable centerline segment):
         maxspeed_inferred (from class), maxspeed_final (merged)
 
     Traffic
-        dvrpc_aadt, aadt_distance_ft
-        state_aadt, has_aadt, adt_source
+        dvrpc_aadt, aadt_distance_ft (raw DVRPC volume; NOT a reliable
+        per-segment AADT — the source service mixes 15-minute, bicycle,
+        pedestrian, and class-count records)
+        state_aadt (real PennDOT AADT; NULL for non-state-owned streets,
+        which is most of Philadelphia's local road network)
 
     Intersection & calming
         has_any_control, has_signal, has_all_way_stop,
@@ -69,31 +72,6 @@ from data_prep.roadway_defects import load_roadway_defects, aggregate_roadway_de
 OUTPUT_PATH = stash("philly_final_analytical_table.gpkg")
 
 
-def _class_fallback_aadt(road_class: pd.Series) -> pd.Series:
-    numeric_fallbacks = {
-        1: 50000.0,
-        2: 15000.0,
-        3: 7000.0,
-        4: 3000.0,
-        5: 1000.0,
-        9: 500.0,
-        10: 500.0,
-    }
-    text_fallbacks = {
-        "motorway": 50000.0,
-        "trunk": 30000.0,
-        "primary": 15000.0,
-        "secondary": 8000.0,
-        "tertiary": 4000.0,
-        "residential": 1000.0,
-        "unclassified": 1000.0,
-        "service": 500.0,
-    }
-    numeric = pd.to_numeric(road_class, errors="coerce").map(numeric_fallbacks)
-    text = road_class.astype("string").str.lower().map(text_fallbacks)
-    return numeric.fillna(text).fillna(1000.0)
-
-
 def _left_merge(master: gpd.GeoDataFrame, df: pd.DataFrame, on: str = "seg_id") -> gpd.GeoDataFrame:
     master["seg_id"] = master["seg_id"].astype("Int64")
     df[on] = df[on].astype("Int64")
@@ -134,6 +112,10 @@ def build() -> gpd.GeoDataFrame:
     counts = load_traffic_counts()
     aadt = join_aadt_to_segments(counts, cl)
     cl = _left_merge(cl, aadt)
+    # has_aadt from the join only means "a DVRPC record was nearby" — that
+    # record may be a 15-minute, bicycle, or pedestrian count, not AADT.
+    # Drop it here rather than publish a flag whose name overstates it.
+    cl = cl.drop(columns=["has_aadt"])
 
     print("Traffic calming...")
     devices = load_calming_devices()
@@ -177,21 +159,23 @@ def build() -> gpd.GeoDataFrame:
     # Final lane count: prefer state road, then OSM.
     cl["lanes_final"] = cl["state_lane_cnt"].fillna(cl["osm_lanes"])
 
-    # Phase 1: Exposure & Severity Baselining
-    print("Computing Exposure & Severity metrics...")
-    mapped_fallback = _class_fallback_aadt(cl["class"])
-    state_aadt = pd.to_numeric(cl["state_aadt"], errors="coerce")
-    dvrpc_aadt = pd.to_numeric(cl["dvrpc_aadt"], errors="coerce")
-    valid_state_aadt = state_aadt.where(state_aadt > 0)
-    cl["dvrpc_aadt"] = dvrpc_aadt
-    cl["has_aadt"] = valid_state_aadt.notna()
-    cl["adt"] = valid_state_aadt.fillna(mapped_fallback)
-    cl["adt_source"] = np.where(valid_state_aadt.notna(), "state_aadt", "class_estimate")
+    # Phase 1: Severity & Density Baselining
+    #
+    # There is no reliable per-segment traffic volume for most of Philadelphia:
+    # PennDOT's state_aadt only covers state-owned roads (a small minority of
+    # segments), and DVRPC's dvrpc_aadt is not a clean AADT (see traffic_counts.py).
+    # A prior version filled the gap with a road-class lookup table (e.g. "Local
+    # roads = 1000 vehicles/day") and presented the result as an "AADT estimate."
+    # That number was not a measurement of the segment — it was the same constant
+    # for every segment of that class citywide — so it has been removed rather
+    # than patched. crash_density (crashes per 1,000 ft of real, measured segment
+    # length) is the honest metric: no invented traffic volume involved.
+    print("Computing Severity & Density metrics...")
+    cl["dvrpc_aadt"] = pd.to_numeric(cl["dvrpc_aadt"], errors="coerce")
     cl["length"] = cl.geometry.length
-    cl["vmt"] = cl["adt"] * (cl["length"] / 5280.0)
-    cl["risk_index"] = np.where(
-        cl["vmt"] > 0,
-        (cl["crash_count"] * 1000000.0) / (cl["adt"] * cl["length"]),
+    cl["crash_density"] = np.where(
+        cl["length"] > 0,
+        (cl["crash_count"] * 1000.0) / cl["length"],
         0.0
     )
     cl["has_fatality"] = np.where(cl["fatal_count"] > 0, 1, 0)
