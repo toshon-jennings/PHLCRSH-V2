@@ -73,10 +73,10 @@ DuckDB-WASM runs in the browser. The app downloads GeoParquet files, registers t
 ## Links
 
 - [NotebookLM Workspace](https://notebooklm.google.com/notebook/d7006b6e-266a-4a95-bce0-c2e9f170e34b)
-- [Notebook source](https://github.com/benpolinsky/PHLCRSH/blob/main/crash_notebook.ipynb)
-- [Notebook PDF](https://github.com/benpolinsky/PHLCRSH/blob/main/crash_notebook.pdf)
-- [GitHub repository](https://github.com/benpolinsky/PHLCRSH)
-- [Deployed map](https://benpolinsky.github.io/PHLCRSH/)
+- [Notebook source](https://github.com/toshon-jennings/PHLCRSH-V2/blob/main/crash_notebook.ipynb)
+- [Notebook PDF](https://github.com/toshon-jennings/PHLCRSH-V2/blob/main/crash_notebook.pdf)
+- [GitHub repository](https://github.com/toshon-jennings/PHLCRSH-V2)
+- [Deployed map](https://bit.ly/PHLCRSH-V2)
 
 ## Technical Postscript
 
