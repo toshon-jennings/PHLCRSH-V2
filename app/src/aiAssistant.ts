@@ -47,11 +47,13 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - state_total_width_ft (FLOAT): Total roadway width from State Road attributes.
 - state_lane_cnt (INTEGER): Number of lanes from State Road data.
 - state_divisor_type (VARCHAR): Median separator ("Divided", "Undivided", "Barrier").
+- state_aadt (FLOAT): PennDOT state-road AADT where present; NULL for most local/city streets in the current browser dataset.
 - state_road_distance (FLOAT): Feet to nearest State Road centerline.
 - GEOID (VARCHAR): Census block group identifier for the segment midpoint.
-- dvrpc_aadt (FLOAT): Raw Average Daily Traffic value from DVRPC counts; values below 500 are treated as invalid for exposure math.
-- has_aadt (INTEGER): Binary (1: has valid DVRPC AADT; 0: imputed).
-- adt (FLOAT): Final cleaned Average Daily Traffic. Tiny raw counts below 500 fall back to the road-class estimate.
+- dvrpc_aadt (FLOAT): Legacy/raw DVRPC traffic-count volume. Do NOT treat this as AADT; the source service includes 15-minute, bicycle, pedestrian, and class-count records.
+- has_aadt (INTEGER): Binary (1: measured PennDOT state_aadt is present; 0: exposure is estimated).
+- adt (FLOAT): Exposure denominator used for risk. This is measured AADT only when adt_source = 'state_aadt'; otherwise it is a functional-class estimate.
+- adt_source (VARCHAR): 'state_aadt' for measured PennDOT AADT, otherwise 'class_estimate'.
 - vmt (FLOAT): Daily Vehicle Miles Traveled.
 - risk_index (FLOAT): Normalized Risk Index (crash frequency per million daily vehicle-feet).
 - crash_count (INTEGER): Total snapped crashes.
@@ -77,7 +79,7 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - roadway_open_request_count (INTEGER): Open 311 roadway-condition requests.
 - geometry (GEOMETRY): LineString (EPSG:4326).
 
-NEVER use these columns (they DO NOT exist and will cause a database error — the query will fail): road_class, susp_serious_inj_count, ped_count, bicycle_count, state_aadt, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.
+NEVER use these columns (they DO NOT exist and will cause a database error — the query will fail): road_class, susp_serious_inj_count, ped_count, bicycle_count, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.
 If you need pedestrian or bicycle crash data: use crash_count (total crashes). There are no separate ped_count or bicycle_count columns.\n
 2. 'block_groups'
 Contains census block groups. Columns:

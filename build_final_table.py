@@ -21,8 +21,8 @@ Final schema (one row per driveable centerline segment):
         maxspeed_inferred (from class), maxspeed_final (merged)
 
     Traffic
-        dvrpc_aadt, has_aadt, aadt_distance_ft
-        state_aadt
+        dvrpc_aadt, aadt_distance_ft
+        state_aadt, has_aadt, adt_source
 
     Intersection & calming
         has_any_control, has_signal, has_all_way_stop,
@@ -67,7 +67,6 @@ from data_prep.roadway_defects import load_roadway_defects, aggregate_roadway_de
 
 
 OUTPUT_PATH = stash("philly_final_analytical_table.gpkg")
-MIN_VALID_AADT = 500.0
 
 
 def _class_fallback_aadt(road_class: pd.Series) -> pd.Series:
@@ -183,11 +182,11 @@ def build() -> gpd.GeoDataFrame:
     mapped_fallback = _class_fallback_aadt(cl["class"])
     state_aadt = pd.to_numeric(cl["state_aadt"], errors="coerce")
     dvrpc_aadt = pd.to_numeric(cl["dvrpc_aadt"], errors="coerce")
-    valid_state_aadt = state_aadt.where(state_aadt >= MIN_VALID_AADT)
-    valid_dvrpc_aadt = dvrpc_aadt.where(dvrpc_aadt >= MIN_VALID_AADT)
-    cl["dvrpc_aadt"] = valid_dvrpc_aadt
-    cl["has_aadt"] = valid_dvrpc_aadt.notna()
-    cl["adt"] = valid_state_aadt.fillna(valid_dvrpc_aadt).fillna(mapped_fallback)
+    valid_state_aadt = state_aadt.where(state_aadt > 0)
+    cl["dvrpc_aadt"] = dvrpc_aadt
+    cl["has_aadt"] = valid_state_aadt.notna()
+    cl["adt"] = valid_state_aadt.fillna(mapped_fallback)
+    cl["adt_source"] = np.where(valid_state_aadt.notna(), "state_aadt", "class_estimate")
     cl["length"] = cl.geometry.length
     cl["vmt"] = cl["adt"] * (cl["length"] / 5280.0)
     cl["risk_index"] = np.where(

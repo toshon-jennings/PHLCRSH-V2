@@ -20,15 +20,14 @@ let _db: duckdb.AsyncDuckDB | null = null;
 type StorageMode = 'chromium-opfs' | 'memory';
 
 const SEGMENT_COLUMN_DEFAULTS = [
+  { name: 'state_aadt', expr: 'NULL::DOUBLE' },
   { name: 'roadway_request_count', expr: '0::INTEGER' },
   { name: 'roadway_defect_count', expr: '0::INTEGER' },
   { name: 'roadway_paving_request_count', expr: '0::INTEGER' },
   { name: 'roadway_open_request_count', expr: '0::INTEGER' },
 ];
 
-const MIN_VALID_AADT = 500;
-
-const CLASS_FALLBACK_AADT_SQL = `
+const CLASS_EXPOSURE_ESTIMATE_SQL = `
 CASE TRY_CAST(class AS INTEGER)
   WHEN 1 THEN 50000.0
   WHEN 2 THEN 15000.0
@@ -44,7 +43,7 @@ END
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
 
-  const DB_VERSION = 'v5_roadway_defects';
+  const DB_VERSION = 'v6_exposure_source';
   const versionKey = 'db_version';
   const currentVersion = localStorage.getItem(versionKey);
   if (currentVersion !== DB_VERSION) {
@@ -102,6 +101,9 @@ async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
     .filter(({ name }) => !columns.has(name))
     .map(({ name, expr }) => `${expr} AS ${name}`);
   const defaultSelect = defaults.length ? `, ${defaults.join(', ')}` : '';
+  const excludedColumns = ['adt', 'vmt', 'risk_index', 'has_aadt', 'exposure_adt', 'exposure_source'];
+  if (columns.has('adt_source')) excludedColumns.push('adt_source');
+  const excludeSelect = `* EXCLUDE (${excludedColumns.join(', ')})`;
   await conn.query(`
     CREATE OR REPLACE VIEW segments AS
     WITH base AS (
@@ -111,14 +113,19 @@ async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
       SELECT
         *,
         CASE
-          WHEN TRY_CAST(adt AS DOUBLE) >= ${MIN_VALID_AADT} THEN TRY_CAST(adt AS DOUBLE)
-          ELSE ${CLASS_FALLBACK_AADT_SQL}
-        END AS exposure_adt
+          WHEN TRY_CAST(state_aadt AS DOUBLE) > 0 THEN TRY_CAST(state_aadt AS DOUBLE)
+          ELSE ${CLASS_EXPOSURE_ESTIMATE_SQL}
+        END AS exposure_adt,
+        CASE
+          WHEN TRY_CAST(state_aadt AS DOUBLE) > 0 THEN 'state_aadt'
+          ELSE 'class_estimate'
+        END AS exposure_source
       FROM base
     )
     SELECT
-      * EXCLUDE (adt, vmt, risk_index, has_aadt, exposure_adt),
+      ${excludeSelect},
       exposure_adt AS adt,
+      exposure_source AS adt_source,
       exposure_adt * TRY_CAST(length AS DOUBLE) / 5280.0 AS vmt,
       CASE
         WHEN exposure_adt > 0 AND TRY_CAST(length AS DOUBLE) > 0
@@ -126,7 +133,7 @@ async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
         ELSE 0.0
       END AS risk_index,
       CASE
-        WHEN TRY_CAST(adt AS DOUBLE) >= ${MIN_VALID_AADT} THEN has_aadt
+        WHEN exposure_source = 'state_aadt' THEN true
         ELSE false
       END AS has_aadt
     FROM exposure
