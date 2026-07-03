@@ -35,9 +35,11 @@ function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const speed = p.maxspeed_final != null ? `${(+p.maxspeed_final).toFixed(0)} mph` : '—';
   const riskIndex = p.risk_index != null ? p.risk_index.toFixed(2) : '—';
   const adt = p.adt != null ? p.adt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+  const defects = p.roadway_defect_count != null ? String(p.roadway_defect_count) : '—';
   return `<div class="seg-popup">
     ${row('Risk Index', riskIndex)}
     ${row('Crashes', String(p.crash_count ?? '—'))}
+    ${row('311 Defects', defects)}
     ${row('ADT', adt)}
     ${row('Canopy', canopy)}
     ${row('Grade', grade)}
@@ -211,6 +213,7 @@ export async function initMap(container: string) {
   const INFRASTRUCTURE_OVERLAYS = [
     { toggleId: 'toggle-bike-lanes', layerId: 'bike-lanes', legendId: 'legend-bike-lanes' },
     { toggleId: 'toggle-signals', layerId: 'signals', legendId: 'legend-signals' },
+    { toggleId: 'toggle-roadway-defects', layerId: 'roadway-defects', legendId: 'legend-roadway-defects' },
   ];
 
   const EQUITY_OVERLAYS = [
@@ -618,6 +621,8 @@ export async function initMap(container: string) {
       ['Width (calc.)', fmt(p.cartway_width_ft, ' ft'), ''],
       ['Bike Lanes', p.bike_infra_type ?? 'None', ''],
       ['Int. Control', p.intersection_control ?? 'Uncontrolled', ''],
+      ['311 Defects', fmt(p.roadway_defect_count, ''), ''],
+      ['311 Paving', fmt(p.roadway_paving_request_count, ''), ''],
     ];
     if (deltaStr) rows.push([
       'Width (state)',

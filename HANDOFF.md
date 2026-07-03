@@ -31,4 +31,8 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] 5.4 Map Highlight & Zoom Bindings (flashes MapLibre highlight layer in neon cyan and uses `fitBounds` to auto-zoom on returned segments)
   - [x] 5.5 Same-Origin Data CORS Resolution (migrated data paths to `/PHLCRSH-V2/data/...` to load from same origin, resolving CDN CORS blocks)
   - [x] 5.6 Service Worker 404 Resolution (made `coi-serviceworker.js` load relatively to ensure COOP/COEP headers work on GitHub Pages)
-
+- [x] Phase 6: 311 Roadway Defect Overlay
+  - [x] 6.1 Added `data_prep/roadway_defects.py` to pull CARTO `public_cases_fc` Street Defect (`SR-ST01`) and Street Paving (`SR-ST23`) requests, cache daily, project to EPSG:2272, and snap to centerline segments
+  - [x] 6.2 Added roadway request count columns to `build_final_table.py`, GeoParquet export, data dictionary, docs, and AI assistant schema
+  - [x] 6.3 Added Street Defects as a MapLibre infrastructure overlay with legend, popup/sidebar stats, and backward-compatible DuckDB defaults for older parquet files
+  - [x] 6.4 Validation: live CARTO aggregate confirmed 93,866 `SR-ST01` and 4,246 `SR-ST23` records since 2020; local geocoded cache loaded 98,043 records with lon/lat; synthetic snap aggregation and `npm run build` passed

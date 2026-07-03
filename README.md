@@ -17,6 +17,7 @@ The map is not a causal model. It is a browser-based analytical viewer for compa
 - Street geometry: [OpenDataPhilly Street Centerlines](https://opendataphilly.org/datasets/street-centerlines/) and [OpenDataPhilly Curbs](https://opendataphilly.org/datasets/curbs/).
 - State-road attributes: [PASDA PennDOT State Roads](https://mapservices.pasda.psu.edu/server/rest/services/pasda/PennDOT/MapServer/4), extracted from PennDOT Roadway Management System data.
 - Traffic-count context: [DVRPC Traffic Counts ArcGIS service](https://arcgis.dvrpc.org/portal/rest/services/Transportation/TrafficCounts/FeatureServer).
+- 311 roadway condition requests: [OpenDataPhilly 311 Service and Information Requests](https://opendataphilly.org/datasets/311-service-and-information-requests/), pulled from the City CARTO `public_cases_fc` table for Street Defect (`SR-ST01`) and Street Paving (`SR-ST23`) service codes.
 - Street trees: [OpenDataPhilly Philadelphia Tree Inventory](https://opendataphilly.org/datasets/philadelphia-tree-inventory/).
 - Tree canopy and land cover: [OpenDataPhilly Philadelphia Land Cover Raster](https://opendataphilly.org/datasets/philadelphia-land-cover-raster/).
 - Elevation and grade inputs: [OpenDataPhilly Digital Elevation Model](https://opendataphilly.org/datasets/digital-elevation-model-dem/).
@@ -77,4 +78,3 @@ Click the **Gear** icon in the chat header to open the settings pane:
 
 > [!NOTE]
 > For the best client-side experience, **Gemini** or **OpenRouter** are recommended because they natively support browser fetch requests. Direct calls to Anthropic's endpoints from a web browser will result in CORS restrictions.
-

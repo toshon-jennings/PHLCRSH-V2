@@ -101,6 +101,12 @@ export const LEGENDS: Record<string, Legend> = {
   'signals': { kind: 'steps', stops: [
     { color: '#ef4444', label: 'Traffic Signal' },
   ]},
+  'roadway-defects': { kind: 'steps', stops: [
+    { color: '#fed7aa', label: '1' },
+    { color: '#fb923c', label: '3' },
+    { color: '#f97316', label: '10' },
+    { color: '#ea580c', label: '25+' },
+  ]},
   'heat': { kind: 'steps', stops: [
     { color: '#f97316', label: 'High Heat' },
   ]},
@@ -443,6 +449,31 @@ export function addMapSourcesAndLayers(
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
     },
+  });
+
+  // 311 Street Defect requests
+  map.addLayer({
+    id: 'roadway-defects',
+    type: 'line',
+    source: 'segments',
+    filter: ['>', ['coalesce', ['get', 'roadway_defect_count'], 0], 0],
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': [
+        'step', ['coalesce', ['get', 'roadway_defect_count'], 0],
+        '#fed7aa',
+        3, '#fb923c',
+        10, '#f97316',
+        25, '#ea580c',
+      ],
+      'line-width': [
+        'interpolate', ['linear'], ['zoom'],
+        10, 1.5,
+        13, 3.5,
+        16, 6,
+      ],
+      'line-opacity': 0.9,
+    }
   });
 
   // Phase 4: Urban Heat Index
