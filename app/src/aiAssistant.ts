@@ -9,15 +9,20 @@ interface Message {
   sql?: string;
   segIds?: number[];
   error?: string;
+  rows?: any[];
 }
+
+// A single conversation turn as sent to the LLM (the last turn must be 'user')
+type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 const DEFAULT_MODELS: Record<string, string> = {
   gemini: 'gemini-2.5-flash',
   openai: 'gpt-4o-mini',
-  anthropic: 'claude-3-5-haiku-20241022',
+  anthropic: 'claude-haiku-4-5-20251001',
   groq: 'llama-3.3-70b-versatile',
   grok: 'grok-2-1212',
   openrouter: 'google/gemini-2.5-flash',
+  custom: '',
 };
 
 const SCHEMA_GROUNDING = `
@@ -97,6 +102,7 @@ CRITICAL RULES:
    Mt. Airy: name LIKE '%MOUNT_AIRY%' or IN ('MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
 6. South Philly: GEOID LIKE '4210100%'.
 7. ALWAYS append LIMIT 20 unless the user explicitly requests more.
+8. The conversation may include earlier questions and the SQL that answered them. For follow-up requests (e.g., "now only school zones", "sort those by fatalities"), modify the most recent SQL accordingly instead of starting from scratch.
 `;
 
 function escapeHTML(text: string): string {
@@ -120,6 +126,49 @@ function extractSQL(text: string): string {
     return codeMatch[1].trim();
   }
   return text.trim();
+}
+
+async function consumeSSE(response: Response, onEvent: (raw: string) => void): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const processLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) return;
+    const payload = trimmed.slice(5).trim();
+    if (payload === '[DONE]') return;
+    onEvent(payload);
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    lines.forEach(processLine);
+  }
+  // Flush any final event that arrived without a trailing newline
+  buffer += decoder.decode();
+  buffer.split('\n').forEach(processLine);
+}
+
+function validateReadOnlySQL(sql: string): void {
+  // Strip line and block comments, then leading/trailing whitespace
+  const stripped = sql
+    .replace(/--.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .trim();
+
+  if (!/^(SELECT|WITH)\b/i.test(stripped)) {
+    throw new Error('Only read-only SELECT/WITH queries are allowed.');
+  }
+
+  // Reject multi-statement input: no semicolon except one optional trailing terminator
+  const withoutTrailingSemi = stripped.replace(/;\s*$/, '');
+  if (withoutTrailingSemi.includes(';')) {
+    throw new Error('Multi-statement SQL is not allowed.');
+  }
 }
 
 function cleanQueryResults(rows: any[]): any[] {
@@ -146,26 +195,30 @@ async function callLLM(
   model: string,
   apiKey: string,
   systemPrompt: string,
-  userPrompt: string
+  turns: ChatTurn[],
+  onChunk?: (delta: string) => void,
+  baseUrl?: string
 ): Promise<string> {
-  if (!apiKey) {
+  if (!apiKey && provider !== 'custom') {
     throw new Error('API Key is missing. Please configure it in the assistant settings (gear icon).');
   }
 
+  const streaming = !!onChunk;
+
   if (provider === 'gemini') {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = streaming
+      ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`
+      : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: userPrompt }],
-          },
-        ],
+        contents: turns.map((t) => ({
+          role: t.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: t.content }],
+        })),
         systemInstruction: {
           parts: [{ text: systemPrompt }],
         },
@@ -185,6 +238,24 @@ async function callLLM(
       throw new Error(`Gemini API error: ${errorMsg}`);
     }
 
+    if (streaming) {
+      let fullText = '';
+      await consumeSSE(response, (raw) => {
+        try {
+          const parsed = JSON.parse(raw);
+          const delta = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (delta) {
+            fullText += delta;
+            onChunk!(delta);
+          }
+        } catch {}
+      });
+      if (!fullText) {
+        throw new Error('Gemini API returned an empty response.');
+      }
+      return fullText;
+    }
+
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
@@ -197,14 +268,16 @@ async function callLLM(
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: model,
         max_tokens: 1024,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
+        messages: turns,
         temperature: 0.1,
+        stream: streaming,
       }),
     });
 
@@ -215,7 +288,25 @@ async function callLLM(
         const parsed = JSON.parse(errText);
         if (parsed.error?.message) errorMsg = parsed.error.message;
       } catch {}
-      throw new Error(`Anthropic API error: ${errorMsg}. Note: Browser requests may be blocked by CORS.`);
+      throw new Error(`Anthropic API error: ${errorMsg}`);
+    }
+
+    if (streaming) {
+      let fullText = '';
+      await consumeSSE(response, (raw) => {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+            const delta: string = parsed.delta.text;
+            fullText += delta;
+            onChunk!(delta);
+          }
+        } catch {}
+      });
+      if (!fullText) {
+        throw new Error('Anthropic API returned an empty response.');
+      }
+      return fullText;
     }
 
     const data = await response.json();
@@ -235,6 +326,11 @@ async function callLLM(
       endpoint = 'https://api.x.ai/v1/chat/completions';
     } else if (provider === 'openrouter') {
       endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+    } else if (provider === 'custom') {
+      if (!baseUrl) {
+        throw new Error('Base URL is missing. Please configure it in the assistant settings (gear icon).');
+      }
+      endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
     } else {
       throw new Error(`Unknown provider: ${provider}`);
     }
@@ -247,11 +343,9 @@ async function callLLM(
       },
       body: JSON.stringify({
         model: model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
+        messages: [{ role: 'system', content: systemPrompt }, ...turns],
         temperature: 0.1,
+        stream: streaming,
       }),
     });
 
@@ -263,6 +357,24 @@ async function callLLM(
         if (parsed.error?.message) errorMsg = parsed.error.message;
       } catch {}
       throw new Error(`${provider.toUpperCase()} API error: ${errorMsg}`);
+    }
+
+    if (streaming) {
+      let fullText = '';
+      await consumeSSE(response, (raw) => {
+        try {
+          const parsed = JSON.parse(raw);
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullText += delta;
+            onChunk!(delta);
+          }
+        } catch {}
+      });
+      if (!fullText) {
+        throw new Error(`${provider.toUpperCase()} API returned an empty response.`);
+      }
+      return fullText;
     }
 
     const data = await response.json();
@@ -303,6 +415,15 @@ export function initAIAssistant() {
         <span class="ai-panel-title">Safety Assistant</span>
       </div>
       <div class="ai-panel-actions">
+        <button id="ai-clear-chat" class="ai-panel-action-btn" aria-label="Clear chat history">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6"></path>
+            <path d="M14 11v6"></path>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+          </svg>
+        </button>
         <button id="ai-settings-toggle" class="ai-panel-action-btn" aria-label="Toggle LLM settings">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
@@ -324,12 +445,17 @@ export function initAIAssistant() {
           <option value="groq">Groq</option>
           <option value="grok">Grok</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
         </select>
         <div id="ai-provider-note" class="ai-settings-alert" style="display: none;"></div>
       </div>
       <div class="ai-settings-field">
         <label for="ai-model">Model Name</label>
         <input type="text" id="ai-model" placeholder="gemini-2.5-flash">
+      </div>
+      <div id="ai-base-url-field" class="ai-settings-field" style="display: none;">
+        <label for="ai-base-url">Base URL</label>
+        <input type="text" id="ai-base-url" placeholder="http://localhost:1234/v1">
       </div>
       <div class="ai-settings-field">
         <label for="ai-api-key">API Key</label>
@@ -341,6 +467,12 @@ export function initAIAssistant() {
     <div id="ai-chat-messages" class="ai-chat-messages">
       <div class="ai-message assistant-message">
         Hi! I'm your PHLCRSH Safety Assistant. Ask me a safety query (e.g., "Find the top 5 highest risk streets with no bike lanes in South Philly") and I will query the local DuckDB database and summarize the insights.
+      </div>
+      <div id="ai-starter-chips" class="ai-starter-chips">
+        <button type="button" class="ai-starter-chip">Top 10 riskiest streets citywide</button>
+        <button type="button" class="ai-starter-chip">High-risk streets with no bike lanes in South Philly</button>
+        <button type="button" class="ai-starter-chip">Most 311 street defects near schools</button>
+        <button type="button" class="ai-starter-chip">Streets with fatal crashes and no traffic signal</button>
       </div>
     </div>
 
@@ -367,30 +499,40 @@ export function initAIAssistant() {
   const settingsPane = document.getElementById('ai-settings-pane') as HTMLDivElement;
   const settingsSaveBtn = document.getElementById('ai-settings-save') as HTMLButtonElement;
   const chatCloseBtn = document.getElementById('ai-chat-close') as HTMLButtonElement;
+  const clearChatBtn = document.getElementById('ai-clear-chat') as HTMLButtonElement;
 
   const providerSelect = document.getElementById('ai-provider') as HTMLSelectElement;
   const modelInput = document.getElementById('ai-model') as HTMLInputElement;
   const apiKeyInput = document.getElementById('ai-api-key') as HTMLInputElement;
   const providerNote = document.getElementById('ai-provider-note') as HTMLDivElement;
+  const baseUrlField = document.getElementById('ai-base-url-field') as HTMLDivElement;
+  const baseUrlInput = document.getElementById('ai-base-url') as HTMLInputElement;
 
   // Load Settings from LocalStorage
   let currentProvider = localStorage.getItem('phlcrsh_ai_provider') || 'gemini';
   let currentModel = localStorage.getItem('phlcrsh_ai_model') || DEFAULT_MODELS[currentProvider];
   let currentApiKey = localStorage.getItem(`phlcrsh_ai_key_${currentProvider}`) || '';
+  let currentBaseUrl = localStorage.getItem('phlcrsh_ai_base_url') || '';
 
   // Initialize form fields
   providerSelect.value = currentProvider;
   modelInput.value = currentModel;
   apiKeyInput.value = currentApiKey;
+  baseUrlInput.value = currentBaseUrl;
+  baseUrlField.style.display = currentProvider === 'custom' ? 'flex' : 'none';
 
   const updateProviderNote = (provider: string) => {
     if (provider === 'anthropic') {
       providerNote.style.display = 'block';
-      providerNote.textContent = 'Warning: Direct browser requests to Anthropic will fail due to CORS. Use Gemini or OpenRouter for pure client-side calls.';
-      providerNote.style.color = 'var(--color-warn)';
+      providerNote.textContent = 'Note: Requires an Anthropic API key. Direct browser requests are supported.';
+      providerNote.style.color = 'var(--color-good)';
     } else if (provider === 'gemini') {
       providerNote.style.display = 'block';
       providerNote.textContent = 'Note: Gemini API keys can be requested on Google AI Studio. Direct browser requests work seamlessly.';
+      providerNote.style.color = 'var(--color-good)';
+    } else if (provider === 'custom') {
+      providerNote.style.display = 'block';
+      providerNote.textContent = 'Note: Point this at a local OpenAI-compatible server, e.g. LM Studio (http://localhost:1234/v1) or Ollama (http://localhost:11434/v1). An API key is usually not required.';
       providerNote.style.color = 'var(--color-good)';
     } else {
       providerNote.style.display = 'none';
@@ -406,10 +548,13 @@ export function initAIAssistant() {
       currentProvider = localStorage.getItem('phlcrsh_ai_provider') || 'gemini';
       currentModel = localStorage.getItem('phlcrsh_ai_model') || DEFAULT_MODELS[currentProvider];
       currentApiKey = localStorage.getItem(`phlcrsh_ai_key_${currentProvider}`) || '';
+      currentBaseUrl = localStorage.getItem('phlcrsh_ai_base_url') || '';
 
       providerSelect.value = currentProvider;
       modelInput.value = currentModel;
       apiKeyInput.value = currentApiKey;
+      baseUrlInput.value = currentBaseUrl;
+      baseUrlField.style.display = currentProvider === 'custom' ? 'flex' : 'none';
       updateProviderNote(currentProvider);
 
       settingsPane.classList.remove('is-hidden');
@@ -427,6 +572,8 @@ export function initAIAssistant() {
     const prov = providerSelect.value;
     modelInput.value = DEFAULT_MODELS[prov] || '';
     apiKeyInput.value = localStorage.getItem(`phlcrsh_ai_key_${prov}`) || '';
+    baseUrlInput.value = localStorage.getItem('phlcrsh_ai_base_url') || '';
+    baseUrlField.style.display = prov === 'custom' ? 'flex' : 'none';
     updateProviderNote(prov);
   });
 
@@ -435,14 +582,17 @@ export function initAIAssistant() {
     const prov = providerSelect.value;
     const model = modelInput.value.trim();
     const key = apiKeyInput.value.trim();
+    const baseUrl = baseUrlInput.value.trim();
 
     localStorage.setItem('phlcrsh_ai_provider', prov);
     localStorage.setItem('phlcrsh_ai_model', model);
     localStorage.setItem(`phlcrsh_ai_key_${prov}`, key);
+    localStorage.setItem('phlcrsh_ai_base_url', baseUrl);
 
     currentProvider = prov;
     currentModel = model;
     currentApiKey = key;
+    currentBaseUrl = baseUrl;
 
     toggleSettings();
   });
@@ -470,17 +620,20 @@ export function initAIAssistant() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   };
 
-  // Append new message bubble to list
-  const appendMessage = (msg: Message) => {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `ai-message ${msg.role}-message`;
+  // Only auto-scroll during streaming while the user is already reading near the bottom
+  const isNearBottom = () =>
+    messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 48;
 
-    let html =
-      msg.role === 'assistant'
-        ? renderMarkdown(msg.content)
-        : escapeHTML(msg.content).replace(/\n/g, '<br>');
+  // Build the primary text/markdown body for a message
+  const renderMessageBody = (msg: Message): string =>
+    msg.role === 'assistant'
+      ? renderMarkdown(msg.content)
+      : escapeHTML(msg.content).replace(/\n/g, '<br>');
 
-    // Add SQL details if present
+  // Build the SQL/map/error affordances that trail a finished message
+  const renderMessageExtras = (msg: Message): string => {
+    let html = '';
+
     if (msg.sql) {
       const sqlId = `sql-${Math.random().toString(36).substr(2, 9)}`;
       html += `
@@ -494,13 +647,34 @@ export function initAIAssistant() {
       `;
     }
 
-    // Add Highlight and Zoom button if segments exist
     if (msg.segIds && msg.segIds.length > 0) {
       html += `
         <button class="show-on-map-btn" data-segs="${msg.segIds.join(',')}">
           <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
           Flash & Zoom to Streets (${msg.segIds.length})
         </button>
+      `;
+    }
+
+    if (msg.rows && msg.rows.length > 0) {
+      const dataId = `data-${Math.random().toString(36).substr(2, 9)}`;
+      const headers = Object.keys(msg.rows[0]).filter((key) => key !== 'geometry');
+      const displayRows = msg.rows.slice(0, 20);
+      const tableHead = headers.map((h) => `<th>${escapeHTML(h)}</th>`).join('');
+      const tableBody = displayRows
+        .map(
+          (row) =>
+            `<tr>${headers.map((h) => `<td>${escapeHTML(String(row[h] ?? ''))}</td>`).join('')}</tr>`
+        )
+        .join('');
+      html += `
+        <button class="sql-details-btn" data-data-id="${dataId}">
+          <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          View Data (${msg.rows.length} rows)
+        </button>
+        <div id="${dataId}" style="display: none; margin-top: 6px;">
+          <table><thead><tr>${tableHead}</tr></thead><tbody>${tableBody}</tbody></table>
+        </div>
       `;
     }
 
@@ -512,25 +686,25 @@ export function initAIAssistant() {
       `;
     }
 
-    msgDiv.innerHTML = html;
-    messagesContainer.appendChild(msgDiv);
+    return html;
+  };
 
-    // Event listener for SQL toggle
-    msgDiv.querySelector('.sql-details-btn')?.addEventListener('click', (e) => {
+  // Wire up the SQL-toggle and show-on-map buttons for a rendered message
+  const attachMessageListeners = (msgDiv: HTMLDivElement) => {
+    msgDiv.querySelector('[data-sql-id]')?.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
       const id = btn.getAttribute('data-sql-id');
       const detailsDiv = document.getElementById(id!);
       if (detailsDiv) {
         const isHidden = detailsDiv.style.display === 'none';
         detailsDiv.style.display = isHidden ? 'block' : 'none';
-        btn.innerHTML = isHidden 
+        btn.innerHTML = isHidden
           ? `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Generated SQL`
           : `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg> View Generated SQL`;
         scrollToBottom();
       }
     });
 
-    // Event listener for Highlight and Zoom
     msgDiv.querySelector('.show-on-map-btn')?.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
       const idsStr = btn.getAttribute('data-segs');
@@ -540,8 +714,98 @@ export function initAIAssistant() {
       }
     });
 
-    scrollToBottom();
+    msgDiv.querySelector('[data-data-id]')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const id = btn.getAttribute('data-data-id');
+      const detailsDiv = document.getElementById(id!);
+      if (detailsDiv) {
+        const isHidden = detailsDiv.style.display === 'none';
+        detailsDiv.style.display = isHidden ? 'block' : 'none';
+        const rowsLabel = btn.textContent?.match(/\(\d+ rows\)/)?.[0] || '';
+        btn.innerHTML = isHidden
+          ? `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Data ${rowsLabel}`
+          : `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg> View Data ${rowsLabel}`;
+        scrollToBottom();
+      }
+    });
   };
+
+  // Persisted chat history (localStorage), capped at the last 50 messages
+  const HISTORY_KEY = 'phlcrsh_ai_history';
+  let chatHistory: Message[] = [];
+  try {
+    const saved = localStorage.getItem(HISTORY_KEY);
+    if (saved) chatHistory = JSON.parse(saved);
+  } catch {}
+
+  const saveHistory = () => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(chatHistory.slice(-50)));
+    } catch {}
+  };
+
+  // Append a complete message bubble to the list
+  const appendMessage = (msg: Message): HTMLDivElement => {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `ai-message ${msg.role}-message`;
+    msgDiv.innerHTML = renderMessageBody(msg) + renderMessageExtras(msg);
+    messagesContainer.appendChild(msgDiv);
+    attachMessageListeners(msgDiv);
+    scrollToBottom();
+    return msgDiv;
+  };
+
+  // Append an empty assistant bubble that can be filled in incrementally as tokens stream in
+  const appendStreamingMessage = () => {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'ai-message assistant-message';
+    messagesContainer.appendChild(msgDiv);
+    scrollToBottom();
+
+    return {
+      update: (partialText: string) => {
+        const pinned = isNearBottom();
+        msgDiv.innerHTML = renderMarkdown(partialText);
+        if (pinned) scrollToBottom();
+      },
+      finish: (msg: Message) => {
+        const pinned = isNearBottom();
+        msgDiv.innerHTML = renderMessageBody(msg) + renderMessageExtras(msg);
+        attachMessageListeners(msgDiv);
+        if (pinned) scrollToBottom();
+      },
+      remove: () => msgDiv.remove(),
+    };
+  };
+
+  // Starter chips — clicking one fills the input and submits, then hides the chips for the session
+  const starterChipsEl = document.getElementById('ai-starter-chips') as HTMLDivElement;
+  starterChipsEl?.querySelectorAll<HTMLButtonElement>('.ai-starter-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      chatInput.value = chip.textContent || '';
+      starterChipsEl.remove();
+      chatForm.requestSubmit();
+    });
+  });
+
+  // Restore persisted messages after the welcome bubble. Rendered via appendMessage,
+  // which never triggers a map zoom on its own (only a manual "Flash & Zoom" click does),
+  // so restoring history cannot auto-trigger the map.
+  if (chatHistory.length > 0) {
+    chatHistory.forEach((msg) => appendMessage(msg));
+    starterChipsEl?.remove();
+  }
+
+  // Clear chat history and reset the panel back to just the welcome bubble
+  clearChatBtn.addEventListener('click', () => {
+    chatHistory = [];
+    saveHistory();
+    messagesContainer.innerHTML = `
+      <div class="ai-message assistant-message">
+        Hi! I'm your PHLCRSH Safety Assistant. Ask me a safety query (e.g., "Find the top 5 highest risk streets with no bike lanes in South Philly") and I will query the local DuckDB database and summarize the insights.
+      </div>
+    `;
+  });
 
   // Submit Handler
   chatForm.addEventListener('submit', async (e) => {
@@ -553,13 +817,19 @@ export function initAIAssistant() {
     chatInput.disabled = true;
     chatSendBtn.disabled = true;
 
-    appendMessage({ role: 'user', content: promptText });
+    const userMsg: Message = { role: 'user', content: promptText };
+    appendMessage(userMsg);
+    chatHistory.push(userMsg);
+    saveHistory();
 
-    if (!currentApiKey) {
-      appendMessage({
+    if (!currentApiKey && currentProvider !== 'custom') {
+      const noKeyMsg: Message = {
         role: 'assistant',
         content: 'I need an API key to orchestrate the safety query. Please click the gear icon in the top right of this chat box, select a provider, input your API key, and save it.',
-      });
+      };
+      appendMessage(noKeyMsg);
+      chatHistory.push(noKeyMsg);
+      saveHistory();
       chatInput.disabled = false;
       chatSendBtn.disabled = false;
       return;
@@ -585,6 +855,30 @@ export function initAIAssistant() {
     let cleanedRows: any[] = [];
     let errMsg = '';
 
+    // Conversation context: walk prior history (excluding the just-sent user message)
+    // backwards, collecting user→assistant pairs from turns that produced real SQL.
+    // The SQL pass sees the prior SQL (so follow-ups modify it); the summary pass sees
+    // the prior prose. Capped at 3 pairs, with content truncated to bound token cost.
+    const priorHistory = chatHistory.slice(0, -1);
+    const buildTurns = (mode: 'sql' | 'summary'): ChatTurn[] => {
+      const turns: ChatTurn[] = [];
+      for (let i = priorHistory.length - 1; i > 0 && turns.length < 6; i--) {
+        const a = priorHistory[i];
+        const u = priorHistory[i - 1];
+        if (a.role !== 'assistant' || u.role !== 'user' || a.error || !a.sql) continue;
+        turns.unshift(
+          { role: 'user', content: u.content.slice(0, 500) },
+          {
+            role: 'assistant',
+            content: mode === 'sql' ? `\`\`\`sql\n${a.sql}\n\`\`\`` : a.content.slice(0, 1200),
+          }
+        );
+        i--;
+      }
+      return turns;
+    };
+    const sqlTurns = buildTurns('sql');
+
     // SQL generation + execution with auto-retry once on failure
     const executeSQL = async (): Promise<void> => {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -595,9 +889,14 @@ export function initAIAssistant() {
             currentModel,
             currentApiKey,
             SCHEMA_GROUNDING,
-            attempt === 0
-              ? `Generate a DuckDB SQL query for this request: "${promptText}". Return ONLY the query wrapped in a \`\`\`sql ... \`\`\` code block.`
-              : `The following DuckDB SQL query failed. Fix it and return ONLY the corrected SQL in a \`\`\`sql block.
+            [
+              ...sqlTurns,
+              {
+                role: 'user',
+                content:
+                  attempt === 0
+                    ? `Generate a DuckDB SQL query for this request: "${promptText}". Return ONLY the query wrapped in a \`\`\`sql ... \`\`\` code block.`
+                    : `The following DuckDB SQL query failed. Fix it and return ONLY the corrected SQL in a \`\`\`sql block.
 
 Previous query:
 \`\`\`sql
@@ -606,11 +905,16 @@ ${generatedSQL}
 
 Error: ${errMsg}
 
-Remember: ONLY use columns listed in the schema. Do NOT reference: road_class, susp_serious_inj_count, ped_count, bicycle_count, state_aadt, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.`
+Remember: ONLY use columns listed in the schema. Do NOT reference: road_class, susp_serious_inj_count, ped_count, bicycle_count, state_aadt, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.`,
+              },
+            ],
+            undefined,
+            currentBaseUrl
           );
 
           generatedSQL = extractSQL(sqlLLMResult);
           console.log('[AI Chat] Generated SQL:', generatedSQL);
+          validateReadOnlySQL(generatedSQL);
 
           updateStatus('Executing query locally on DuckDB...');
           const queryResult = await query(generatedSQL);
@@ -640,6 +944,9 @@ Remember: ONLY use columns listed in the schema. Do NOT reference: road_class, s
       }
     };
 
+    let streamingMsg: ReturnType<typeof appendStreamingMessage> | null = null;
+    let streamedText = '';
+
     try {
       await executeSQL();
 
@@ -666,33 +973,51 @@ ${cleanedRows.length > 15 ? `\n(Note: ${cleanedRows.length - 15} more rows were 
 
 Summarize these findings and provide actionable insights.`;
 
+      statusIndicator.remove();
+      streamingMsg = appendStreamingMessage();
+
       const summaryResult = await callLLM(
         currentProvider,
         currentModel,
         currentApiKey,
         summarySystemPrompt,
-        summaryUserPrompt
+        [...buildTurns('summary'), { role: 'user', content: summaryUserPrompt }],
+        (delta) => {
+          streamedText += delta;
+          streamingMsg!.update(streamedText);
+        },
+        currentBaseUrl
       );
 
-      statusIndicator.remove();
-
-      appendMessage({
+      const finalMsg: Message = {
         role: 'assistant',
         content: summaryResult,
         sql: generatedSQL,
         segIds: segIds.length > 0 ? segIds : undefined,
-      });
+        rows: cleanedRows.length > 0 ? cleanedRows : undefined,
+      };
+      streamingMsg.finish(finalMsg);
+      chatHistory.push(finalMsg);
+      saveHistory();
 
     } catch (err: any) {
       console.error('[AI Chat] Error:', err);
       statusIndicator.remove();
 
-      appendMessage({
+      // Keep any partially streamed answer rather than discarding it
+      const errorMsg: Message = {
         role: 'assistant',
-        content: `Sorry, I encountered an issue orchestrating that safety query.`,
+        content: streamedText || `Sorry, I encountered an issue orchestrating that safety query.`,
         sql: generatedSQL || undefined,
         error: err.message || String(err),
-      });
+      };
+      if (streamingMsg) {
+        streamingMsg.finish(errorMsg);
+      } else {
+        appendMessage(errorMsg);
+      }
+      chatHistory.push(errorMsg);
+      saveHistory();
     } finally {
       chatInput.disabled = false;
       chatSendBtn.disabled = false;
