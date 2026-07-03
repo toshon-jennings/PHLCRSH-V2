@@ -6,7 +6,7 @@ The map is not a causal model. It is a browser-based analytical viewer for compa
 
 ## Links
 
-- [Deployed map](https://benpolinsky.github.io/PHLCRSH/)
+- [Deployed map](https://bit.ly/PHLCRSH-V2)
 - [Notebook source](crash_notebook.ipynb)
 - [Notebook PDF](crash_notebook.pdf)
 - [Frontend app](app/)
