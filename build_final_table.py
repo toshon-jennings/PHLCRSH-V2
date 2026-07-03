@@ -67,6 +67,32 @@ from data_prep.roadway_defects import load_roadway_defects, aggregate_roadway_de
 
 
 OUTPUT_PATH = stash("philly_final_analytical_table.gpkg")
+MIN_VALID_AADT = 500.0
+
+
+def _class_fallback_aadt(road_class: pd.Series) -> pd.Series:
+    numeric_fallbacks = {
+        1: 50000.0,
+        2: 15000.0,
+        3: 7000.0,
+        4: 3000.0,
+        5: 1000.0,
+        9: 500.0,
+        10: 500.0,
+    }
+    text_fallbacks = {
+        "motorway": 50000.0,
+        "trunk": 30000.0,
+        "primary": 15000.0,
+        "secondary": 8000.0,
+        "tertiary": 4000.0,
+        "residential": 1000.0,
+        "unclassified": 1000.0,
+        "service": 500.0,
+    }
+    numeric = pd.to_numeric(road_class, errors="coerce").map(numeric_fallbacks)
+    text = road_class.astype("string").str.lower().map(text_fallbacks)
+    return numeric.fillna(text).fillna(1000.0)
 
 
 def _left_merge(master: gpd.GeoDataFrame, df: pd.DataFrame, on: str = "seg_id") -> gpd.GeoDataFrame:
@@ -154,20 +180,16 @@ def build() -> gpd.GeoDataFrame:
 
     # Phase 1: Exposure & Severity Baselining
     print("Computing Exposure & Severity metrics...")
-    class_fallbacks = {
-        "motorway": 50000.0,
-        "trunk": 30000.0,
-        "primary": 15000.0,
-        "secondary": 8000.0,
-        "tertiary": 4000.0,
-        "residential": 500.0,
-        "unclassified": 500.0,
-        "service": 100.0
-    }
-    mapped_fallback = cl["class"].map(class_fallbacks).fillna(500.0)
-    cl["adt"] = cl["state_aadt"].fillna(cl["dvrpc_aadt"]).fillna(mapped_fallback)
-    cl["length"] = cl.geometry.length / 5280.0
-    cl["vmt"] = cl["adt"] * cl["length"]
+    mapped_fallback = _class_fallback_aadt(cl["class"])
+    state_aadt = pd.to_numeric(cl["state_aadt"], errors="coerce")
+    dvrpc_aadt = pd.to_numeric(cl["dvrpc_aadt"], errors="coerce")
+    valid_state_aadt = state_aadt.where(state_aadt >= MIN_VALID_AADT)
+    valid_dvrpc_aadt = dvrpc_aadt.where(dvrpc_aadt >= MIN_VALID_AADT)
+    cl["dvrpc_aadt"] = valid_dvrpc_aadt
+    cl["has_aadt"] = valid_dvrpc_aadt.notna()
+    cl["adt"] = valid_state_aadt.fillna(valid_dvrpc_aadt).fillna(mapped_fallback)
+    cl["length"] = cl.geometry.length
+    cl["vmt"] = cl["adt"] * (cl["length"] / 5280.0)
     cl["risk_index"] = np.where(
         cl["vmt"] > 0,
         (cl["crash_count"] * 1000000.0) / (cl["adt"] * cl["length"]),

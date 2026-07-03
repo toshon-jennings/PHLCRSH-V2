@@ -26,6 +26,21 @@ const SEGMENT_COLUMN_DEFAULTS = [
   { name: 'roadway_open_request_count', expr: '0::INTEGER' },
 ];
 
+const MIN_VALID_AADT = 500;
+
+const CLASS_FALLBACK_AADT_SQL = `
+CASE TRY_CAST(class AS INTEGER)
+  WHEN 1 THEN 50000.0
+  WHEN 2 THEN 15000.0
+  WHEN 3 THEN 7000.0
+  WHEN 4 THEN 3000.0
+  WHEN 5 THEN 1000.0
+  WHEN 9 THEN 500.0
+  WHEN 10 THEN 500.0
+  ELSE 1000.0
+END
+`;
+
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
 
@@ -87,7 +102,35 @@ async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
     .filter(({ name }) => !columns.has(name))
     .map(({ name, expr }) => `${expr} AS ${name}`);
   const defaultSelect = defaults.length ? `, ${defaults.join(', ')}` : '';
-  await conn.query(`CREATE OR REPLACE VIEW segments AS SELECT *${defaultSelect} FROM segments_raw`);
+  await conn.query(`
+    CREATE OR REPLACE VIEW segments AS
+    WITH base AS (
+      SELECT *${defaultSelect} FROM segments_raw
+    ),
+    exposure AS (
+      SELECT
+        *,
+        CASE
+          WHEN TRY_CAST(adt AS DOUBLE) >= ${MIN_VALID_AADT} THEN TRY_CAST(adt AS DOUBLE)
+          ELSE ${CLASS_FALLBACK_AADT_SQL}
+        END AS exposure_adt
+      FROM base
+    )
+    SELECT
+      * EXCLUDE (adt, vmt, risk_index, has_aadt, exposure_adt),
+      exposure_adt AS adt,
+      exposure_adt * TRY_CAST(length AS DOUBLE) / 5280.0 AS vmt,
+      CASE
+        WHEN exposure_adt > 0 AND TRY_CAST(length AS DOUBLE) > 0
+        THEN TRY_CAST(crash_count AS DOUBLE) * 1000000.0 / (exposure_adt * TRY_CAST(length AS DOUBLE))
+        ELSE 0.0
+      END AS risk_index,
+      CASE
+        WHEN TRY_CAST(adt AS DOUBLE) >= ${MIN_VALID_AADT} THEN has_aadt
+        ELSE false
+      END AS has_aadt
+    FROM exposure
+  `);
 }
 
 export async function query(sql: string, db?: duckdb.AsyncDuckDB) {

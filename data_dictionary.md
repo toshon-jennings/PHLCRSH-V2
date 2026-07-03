@@ -28,7 +28,7 @@ This table represents individual street centerline segments in Philadelphia, enr
 ### Phase 1: Exposure & Severity Metrics
 | Column Name | Data Type | Source / Calculation | Description |
 | :--- | :--- | :--- | :--- |
-| **`adt`** | `FLOAT` | DVRPC / PennDOT / Fallbacks | Average Daily Traffic volume. Uses DVRPC telemetry if available, PennDOT State counts as secondary, and class-based volume approximations as fallback. |
+| **`adt`** | `FLOAT` | DVRPC / PennDOT / Fallbacks | Cleaned Average Daily Traffic volume. Uses valid DVRPC/PennDOT counts when available; raw counts below 500 vehicles/day are treated as invalid and replaced with class-based volume approximations. |
 | **`vmt`** | `FLOAT` | `adt * (length / 5280)` | Daily Vehicle Miles Traveled on this segment. |
 | **`risk_index`** | `FLOAT` | `(crashes * 1M) / (adt * length)` | Normalized Risk Index representing crash frequency per million Daily Vehicle-Feet traveled. |
 | **`crash_count`** | `INTEGER` | PennDOT Crashes snap | Total historical crash count snapped to this segment. |

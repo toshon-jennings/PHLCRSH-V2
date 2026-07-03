@@ -59,5 +59,9 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] 10.2 Multi-Turn Memory: `callLLM` now accepts an ordered `ChatTurn[]` conversation (mapped per provider: Gemini `contents`, Anthropic `messages`, OpenAI-compatible `messages`); the submit handler builds capped history from persisted `chatHistory` (last 3 user→assistant pairs from turns that produced real SQL) — the SQL pass sees prior SQL (so follow-ups modify it, per new schema rule 8), the summary pass sees prior prose (truncated)
   - [x] 10.3 End-to-end verification against a local OpenAI-compatible SSE mock (custom provider, port 5199): streamed Markdown rendered incrementally; "View Data (5 rows)" table came from a real DuckDB execution of the generated SQL; follow-up question's requests carried `[system, user, assistant, user]` with the prior SQL in the assistant turn on both passes; history + tables + zoom buttons restored after reload with no auto-zoom; `npm run build` clean
   - [x] 10.4 Incident note: a concurrent Hermes deploy loop (gh-pages stash/reset/clean cycles in this same checkout) twice destroyed uncommitted work during this phase; recovered via `git stash` + scratchpad patch backups. Lesson: don't run deploy agents and coding agents in one working tree — give deploys their own clone/worktree
-
+- [x] Phase 11: AADT Data Quality Guard
+  - [x] 11.1 Investigated implausible High-Risk Corridor rows, including Limekiln Pike segments where raw DVRPC values of 6 and 117 were being treated as valid ADT and inflating risk.
+  - [x] 11.2 Added a browser-side DuckDB view guard: `adt < 500` falls back to the functional-class estimate, `has_aadt` becomes false, and `risk_index`/`vmt` are recomputed from cleaned exposure.
+  - [x] 11.3 Updated `build_final_table.py` so future data rebuilds apply the same 500-vehicle validity floor, support numeric class fallbacks, and keep `length` in feet while deriving VMT from miles.
+  - [x] 11.4 Updated AI assistant/data dictionary/About wording to clarify cleaned AADT and feet-based Risk Index; verified `npm run build`, local DuckDB view syntax, and dev server on port 5179.
 
