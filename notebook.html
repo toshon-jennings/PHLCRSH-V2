@@ -17,15 +17,15 @@
       --font-code: 'Fira Code', monospace;
       
       --color-bg: #06060c;
-      --color-sidebar-bg: #0a0a14;
-      --color-card-bg: #111122;
-      --color-text: #b4b6d0;
+      --color-sidebar-bg: #0f0f1e;
+      --color-card-bg: rgba(20, 20, 40, 0.88);
+      --color-text: #e0e0e0;
       --color-text-strong: #ffffff;
-      --color-muted: #626588;
-      --color-secondary: #8c8fae;
+      --color-muted: #666666;
+      --color-secondary: #888888;
       --color-accent: #5a9cf5;
       --color-accent-hover: #7ab4ff;
-      --color-accent-dim: rgba(90, 156, 245, 0.12);
+      --color-accent-dim: rgba(90, 156, 245, 0.08);
       
       --border-thin: rgba(255, 255, 255, 0.05);
       --border-glow: rgba(90, 156, 245, 0.2);
@@ -207,6 +207,8 @@
       margin-bottom: var(--space-32);
       box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
       transition: border-color 0.25s, box-shadow 0.25s;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     
     .section-card:hover {
