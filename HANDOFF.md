@@ -24,3 +24,11 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] Data Prep Validation (implemented robust self-healing try-except fallbacks for offline downloads)
   - [x] TypeScript & Compilation check (fully resolved and successfully compiled with zero errors)
   - [x] MapLibre Layer Styling (dynamic Risk Index shading via local MapLibre expressions)
+- [x] Phase 5: Grounded AI Safety Assistant & Deployments
+  - [x] 5.1 Reorganize Left Sidebar (grouped title header, cleaned filters into a grid layout, and added dedicated action toolbar)
+  - [x] 5.2 Build Glassmorphic AI Chat Panel (collapsible floating widget with clean styling and smooth transitions)
+  - [x] 5.3 Implement Two-Pass Grounded Text-to-SQL Pipeline (fetches query from LLM, runs locally on DuckDB-WASM, synthesizes natural language summary)
+  - [x] 5.4 Map Highlight & Zoom Bindings (flashes MapLibre highlight layer in neon cyan and uses `fitBounds` to auto-zoom on returned segments)
+  - [x] 5.5 Same-Origin Data CORS Resolution (migrated data paths to `/PHLCRSH-V2/data/...` to load from same origin, resolving CDN CORS blocks)
+  - [x] 5.6 Service Worker 404 Resolution (made `coi-serviceworker.js` load relatively to ensure COOP/COEP headers work on GitHub Pages)
+
