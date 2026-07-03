@@ -36,3 +36,13 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] 6.2 Added roadway request count columns to `build_final_table.py`, GeoParquet export, data dictionary, docs, and AI assistant schema
   - [x] 6.3 Added Street Defects as a MapLibre infrastructure overlay with legend, popup/sidebar stats, and backward-compatible DuckDB defaults for older parquet files
   - [x] 6.4 Validation: live CARTO aggregate confirmed 93,866 `SR-ST01` and 4,246 `SR-ST23` records since 2020; local geocoded cache loaded 98,043 records with lon/lat; synthetic snap aggregation and `npm run build` passed
+- [x] Phase 7: AI Chat Markdown Rendering
+  - [x] 7.1 Added `marked` + `dompurify`; assistant messages now render sanitized Markdown (headings, bold, lists, tables, blockquotes, inline code) in `appendMessage`
+  - [x] 7.2 Hardened rendering: user messages, generated SQL, and error strings are HTML-escaped before `innerHTML` (previously raw — XSS risk)
+  - [x] 7.3 Summary prompt now instructs the LLM to format responses in Markdown; themed CSS for Markdown elements inside `.assistant-message`
+  - [x] 7.4 Verified in browser (dev server on port 5179, pinned in `.claude/launch.json`): escaped `<img onerror>` injection inert, table/list/blockquote styling correct; `npm run build` clean
+- [x] Phase 8: Notebook UI Design Standardization
+  - [x] 8.1 Removed all blue-to-purple decorative gradients from `notebook.html` (progress bar, h1 title, back button, formula block glows)
+  - [x] 8.2 Standardized to solid `var(--color-accent)` (#5a9cf5) and `var(--color-text-strong)` (#ffffff), matching the main portal's exact brand color scheme
+  - [x] 8.3 Successfully rebuilt and validated production build (`v0.1.2`)
+

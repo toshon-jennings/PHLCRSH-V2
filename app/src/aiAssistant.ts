@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { query } from './db';
 import { highlightAndZoomToSegments } from './map';
 
@@ -19,84 +21,94 @@ const DEFAULT_MODELS: Record<string, string> = {
 };
 
 const SCHEMA_GROUNDING = `
-You are a Text-to-SQL assistant for the PHLCRSH (Philadelphia Environmental Safety Analysis & Spatial Diagnostic Engine) running a local DuckDB database.
+You are a Text-to-SQL assistant for PHLCRSH (Philadelphia Safety Analysis) running local DuckDB.
 Given a user's prompt, generate a single executable DuckDB SQL query.
 
 TABLES:
 1. 'segments'
-Represents street centerline segments. Columns:
+Represents street centerline segments. Actual columns (verified against parquet schema):
 - seg_id (INTEGER): Unique street centerline segment identifier (Primary Key).
-- st_name (VARCHAR): Name of the street (e.g., "Broad", "Market").
-- st_type (VARCHAR): Street suffix type (e.g., "St", "Ave", "Blvd").
-- class (INTEGER): Functional classification code (1: Expressway, 2: Major Arterial, 3: Minor Arterial, 4: Collector, 5: Local, 9: Ramp).
-- road_class (VARCHAR): Human-readable functional classification corresponding to class (e.g. 'Expressway', 'Major Arterial', 'Local').
-- length (FLOAT): Geometry length of the street segment in feet.
-- cartway_width_ft (FLOAT): Estimated width of the roadway cartway (curb-to-curb) in feet.
+- st_name (VARCHAR): Street name (e.g., "Broad", "Market").
+- st_type (VARCHAR): Street suffix (e.g., "St", "Ave", "Blvd").
+- class (INTEGER): Functional classification code (1: Expressway, 2: Major Arterial, 3: Minor Arterial, 4: Collector, 5: Local, 9: Ramp). DO NOT use road_class — it does not exist.
+- length (FLOAT): Segment length in MILES.
+- cartway_width_ft (FLOAT): Roadway cartway width (curb-to-curb) in feet.
+- width_confidence (VARCHAR): Reliability of the cartway width measurement.
 - maxspeed_final (FLOAT): Posted speed limit in mph.
-- canopy_pct (FLOAT): Percentage of tree canopy cover (0.0 to 1.0).
-- grade_range_smooth (FLOAT): Smoothed segment slope grade (0.0 to 1.0 representing 0% to 100% slope).
+- lanes_final (INTEGER): Best available lane count (prefers state road data, falls back to OSM).
+- canopy_pct (FLOAT): Tree canopy cover fraction (0.0 to 1.0).
+- grade_range_smooth (FLOAT): Smoothed segment slope grade (0.0 to 1.0 = 0% to 100% slope).
+- grade_smooth_p90 (FLOAT): 90th percentile of smoothed grade along the segment.
 - state_total_width_ft (FLOAT): Total roadway width from State Road attributes.
-- state_lane_cnt (INTEGER): Number of traffic lanes.
-- state_divisor_type (VARCHAR): Median separator category (e.g., "Divided", "Undivided", "Barrier").
-- GEOID (VARCHAR): Census block group identifier containing the segment midpoint.
-- adt (FLOAT): Average Daily Traffic volume.
-- vmt (FLOAT): Daily Vehicle Miles Traveled on this segment.
-- risk_index (FLOAT): Normalized Risk Index representing crash frequency per million Daily Vehicle-Feet traveled.
+- state_lane_cnt (INTEGER): Number of lanes from State Road data.
+- state_divisor_type (VARCHAR): Median separator ("Divided", "Undivided", "Barrier").
+- state_road_distance (FLOAT): Feet to nearest State Road centerline.
+- GEOID (VARCHAR): Census block group identifier for the segment midpoint.
+- dvrpc_aadt (FLOAT): Average Daily Traffic from DVRPC counts.
+- has_aadt (INTEGER): Binary (1: has DVRPC AADT; 0: imputed).
+- adt (FLOAT): Final best-available Average Daily Traffic.
+- vmt (FLOAT): Daily Vehicle Miles Traveled.
+- risk_index (FLOAT): Normalized Risk Index (crash frequency per million daily vehicle-feet).
 - crash_count (INTEGER): Total snapped crashes.
 - fatal_count (INTEGER): Number of fatal crashes.
 - injury_count (INTEGER): Number of general injury crashes.
-- susp_serious_inj_count (INTEGER): Number of suspected serious injury crashes.
 - severity_score (INTEGER): Weighted severity score (10*fatal + 4*serious + 1*injury).
-- has_fatality (INTEGER): Binary indicator (1: has fatality; 0: otherwise).
-- has_severe_injury (INTEGER): Binary indicator (1: has suspected serious injury; 0: otherwise).
-- ped_count (INTEGER): Crashes involving pedestrians.
-- bicycle_count (INTEGER): Crashes involving bicyclists.
-- bike_infra_type (VARCHAR): Snapped bicycle facility category: 'Protected', 'Painted', 'Sharrow', or 'None'.
-- intersection_control (VARCHAR): Intersection control type: 'Signalized', 'Stop-Controlled', or 'Uncontrolled'.
-- nighttime_illumination (FLOAT): Streetlight pole density proxy.
-- is_glare_prone (INTEGER): Binary (1: East-West segment; 0: otherwise).
+- has_fatality (INTEGER): Binary (1: has fatality; 0: otherwise).
+- has_severe_injury (INTEGER): Binary (1: has suspected serious injury; 0: otherwise).
+- bike_infra_type (VARCHAR): Bicycle facility: 'Protected', 'Painted', 'Sharrow', or 'None'.
+- intersection_control (VARCHAR): 'Signalized', 'Stop-Controlled', or 'Uncontrolled'.
+- is_divided (INTEGER): Binary (1: divided roadway; 0: undivided).
+- has_signal (INTEGER): Binary (1: has traffic signal; 0: otherwise).
+- calming_device_count (INTEGER): Number of traffic calming devices on this segment.
+- nighttime_illumination (INTEGER): Streetlight pole count proxy.
+- is_glare_prone (INTEGER): Binary (1: East-West segment prone to sun glare; 0: otherwise).
 - crash_count_day (INTEGER), crash_count_night (INTEGER), crash_count_clear (INTEGER), crash_count_wet (INTEGER)
 - crash_count_day_clear (INTEGER), crash_count_day_wet (INTEGER), crash_count_night_clear (INTEGER), crash_count_night_wet (INTEGER)
 - is_school_zone (INTEGER): Binary (1: within 500ft of school; 0: otherwise).
-- high_heat_vulnerability (INTEGER): Binary (1: Heat Vulnerability Index score of 4 or 5; 0: otherwise).
-- roadway_request_count (INTEGER): Total 311 roadway-condition requests snapped to the segment since 2020.
-- roadway_defect_count (INTEGER): 311 Street Defect requests (SR-ST01) snapped to the segment since 2020.
-- roadway_paving_request_count (INTEGER): 311 Street Paving requests (SR-ST23) snapped to the segment since 2020.
-- roadway_open_request_count (INTEGER): Snapped 311 roadway-condition requests that are not closed/canceled.
-- geometry (GEOMETRY): LineString geometry of the centerline segment (EPSG:4326).
+- high_heat_vulnerability (INTEGER): Binary (1: Heat Vulnerability Index 4 or 5; 0: otherwise).
+- roadway_request_count (INTEGER): Total 311 roadway-condition requests since 2020.
+- roadway_defect_count (INTEGER): 311 Street Defect requests (SR-ST01) since 2020.
+- roadway_paving_request_count (INTEGER): 311 Street Paving requests (SR-ST23) since 2020.
+- roadway_open_request_count (INTEGER): Open 311 roadway-condition requests.
+- geometry (GEOMETRY): LineString (EPSG:4326).
 
+NEVER use these columns (they DO NOT exist and will cause a database error — the query will fail): road_class, susp_serious_inj_count, ped_count, bicycle_count, state_aadt, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.
+If you need pedestrian or bicycle crash data: use crash_count (total crashes). There are no separate ped_count or bicycle_count columns.\n
 2. 'block_groups'
 Contains census block groups. Columns:
 - GEOID (VARCHAR): FIPS block group unique identifier (Primary Key).
 - population (INTEGER): Total population count.
 - median_income (INTEGER): Median household income in USD.
-- geometry (GEOMETRY): Polygon boundary geometry of the census block group (EPSG:4326).
+- geometry (GEOMETRY): Polygon boundary (EPSG:4326).
 
 3. 'neighborhoods'
 Contains neighborhood boundaries. Columns:
 - name (VARCHAR): Uppercase neighborhood name with underscores (e.g., 'CENTER_CITY', 'UNIVERSITY_CITY', 'CHESTNUT_HILL', 'MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
 - listname (VARCHAR): Human-readable list name (e.g., 'Center City East', 'University City', 'Chestnut Hill', 'Mount Airy, East', 'Mount Airy, West').
 - mapname (VARCHAR): Human-readable map name (e.g., 'Center City East', 'University City', 'West Mount Airy').
-- geometry (GEOMETRY): Polygon/MultiPolygon boundary geometry of the neighborhood (EPSG:4326).
+- geometry (GEOMETRY): Polygon/MultiPolygon boundary (EPSG:4326).
 
 CRITICAL RULES:
-1. ALWAYS select 'seg_id' as a column in your query if the query returns street segments. This is required to highlight them on the map.
-2. DuckDB has spatial support, so you can perform spatial filters or joins if needed. Do NOT call spatial functions on non-geometry columns. Use geometry columns ('geometry') directly without ST_GeomFromWKB.
-3. Do NOT make up columns. Use only columns listed above.
-4. Output ONLY valid SQL. Do not include markdown explanations. You MUST wrap the query in \`\`\`sql ... \`\`\` code blocks.
-5. For neighborhood-aware queries (e.g., "Mt. Airy", "Center City", "University City", "Chestnut Hill"):
-   Perform a spatial join (ST_Intersects) between 'segments' and 'neighborhoods' using their geometry columns.
-   Example:
-   \`\`\`sql
-   SELECT s.seg_id, s.st_name, s.crash_count
-   FROM segments s
-   JOIN neighborhoods n ON ST_Intersects(s.geometry, n.geometry)
-   WHERE n.name = 'CHESTNUT_HILL'
-   \`\`\`
-   Note: For "Mt. Airy", filter for name LIKE '%MOUNT_AIRY%' or join matching name IN ('MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
-6. For South Philadelphia or general neighborhoods by FIPS: Philadelphia FIPS code starts with "42101". South Philly block groups generally have GEOIDs starting with "42101000100" to "42101005000" or similar. You can do a filter on \`GEOID LIKE '4210100%'\`.
-7. To avoid browser crashes, ALWAYS append a \`LIMIT 20\` to the query unless the user explicitly requests more.
+1. ALWAYS select 'seg_id' in any query returning street segments (required to highlight on map).
+2. DuckDB has spatial support — use geometry columns directly, NOT ST_GeomFromWKB.
+3. ONLY use columns explicitly listed above in the segments table definition. Do NOT use any other column names — they do not exist and the query will fail with BinderError.
+4. Output ONLY valid SQL wrapped in \`\`\`sql ... \`\`\` code blocks. No markdown explanations.
+5. For neighborhood queries: spatial join with ST_Intersects(s.geometry, n.geometry).
+   Mt. Airy: name LIKE '%MOUNT_AIRY%' or IN ('MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
+6. South Philly: GEOID LIKE '4210100%'.
+7. ALWAYS append LIMIT 20 unless the user explicitly requests more.
 `;
+
+function escapeHTML(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!)
+  );
+}
+
+function renderMarkdown(text: string): string {
+  const rawHtml = marked.parse(text, { async: false, gfm: true, breaks: true });
+  return DOMPurify.sanitize(rawHtml);
+}
 
 function extractSQL(text: string): string {
   const sqlMatch = text.match(/```sql([\s\S]*?)```/i);
@@ -287,11 +299,7 @@ export function initAIAssistant() {
   chatPanel.innerHTML = `
     <div class="ai-panel-header">
       <div class="ai-panel-title-area">
-        <svg class="ai-title-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
-        </svg>
+        <img src="/favicon.png" class="ai-title-icon" width="16" height="16" alt="Safety Icon">
         <span class="ai-panel-title">Safety Assistant</span>
       </div>
       <div class="ai-panel-actions">
@@ -467,22 +475,21 @@ export function initAIAssistant() {
     const msgDiv = document.createElement('div');
     msgDiv.className = `ai-message ${msg.role}-message`;
 
-    let html = msg.content.replace(/\n/g, '<br>');
-
-    // Format inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    let html =
+      msg.role === 'assistant'
+        ? renderMarkdown(msg.content)
+        : escapeHTML(msg.content).replace(/\n/g, '<br>');
 
     // Add SQL details if present
     if (msg.sql) {
       const sqlId = `sql-${Math.random().toString(36).substr(2, 9)}`;
       html += `
-        <br>
         <button class="sql-details-btn" data-sql-id="${sqlId}">
           <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
           View Generated SQL
         </button>
         <div id="${sqlId}" style="display: none; margin-top: 6px;">
-          <pre><code>${msg.sql}</code></pre>
+          <pre><code>${escapeHTML(msg.sql)}</code></pre>
         </div>
       `;
     }
@@ -490,7 +497,6 @@ export function initAIAssistant() {
     // Add Highlight and Zoom button if segments exist
     if (msg.segIds && msg.segIds.length > 0) {
       html += `
-        <br>
         <button class="show-on-map-btn" data-segs="${msg.segIds.join(',')}">
           <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
           Flash & Zoom to Streets (${msg.segIds.length})
@@ -501,7 +507,7 @@ export function initAIAssistant() {
     if (msg.error) {
       html += `
         <div style="color: var(--color-warn); font-size: 10px; margin-top: 6px; border-left: 2px solid var(--color-warn); padding-left: 6px;">
-          <strong>Error:</strong> ${msg.error}
+          <strong>Error:</strong> ${escapeHTML(msg.error)}
         </div>
       `;
     }
@@ -576,41 +582,72 @@ export function initAIAssistant() {
     let generatedSQL = '';
     let segIds: number[] = [];
     let duckdbRows: any[] = [];
+    let cleanedRows: any[] = [];
+    let errMsg = '';
+
+    // SQL generation + execution with auto-retry once on failure
+    const executeSQL = async (): Promise<void> => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          updateStatus(attempt === 0 ? 'Formulating SQL query...' : 'SQL error — retrying with corrected query...');
+          const sqlLLMResult = await callLLM(
+            currentProvider,
+            currentModel,
+            currentApiKey,
+            SCHEMA_GROUNDING,
+            attempt === 0
+              ? `Generate a DuckDB SQL query for this request: "${promptText}". Return ONLY the query wrapped in a \`\`\`sql ... \`\`\` code block.`
+              : `The following DuckDB SQL query failed. Fix it and return ONLY the corrected SQL in a \`\`\`sql block.
+
+Previous query:
+\`\`\`sql
+${generatedSQL}
+\`\`\`
+
+Error: ${errMsg}
+
+Remember: ONLY use columns listed in the schema. Do NOT reference: road_class, susp_serious_inj_count, ped_count, bicycle_count, state_aadt, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.`
+          );
+
+          generatedSQL = extractSQL(sqlLLMResult);
+          console.log('[AI Chat] Generated SQL:', generatedSQL);
+
+          updateStatus('Executing query locally on DuckDB...');
+          const queryResult = await query(generatedSQL);
+          duckdbRows = queryResult.toArray();
+          cleanedRows = cleanQueryResults(duckdbRows);
+          console.log('[AI Chat] Query rows count:', cleanedRows.length);
+
+          duckdbRows.forEach((row: any) => {
+            if (row.seg_id !== undefined && row.seg_id !== null) {
+              const id = Number(row.seg_id);
+              if (!isNaN(id)) segIds.push(id);
+            }
+          });
+
+          if (segIds.length > 0) {
+            highlightAndZoomToSegments(segIds);
+          }
+          return; // success
+        } catch (err: any) {
+          if (attempt === 0 && generatedSQL) {
+            errMsg = err.message || String(err);
+            console.warn('[AI Chat] First SQL attempt failed, retrying:', errMsg);
+            continue; // retry once
+          }
+          throw err; // both failed or no SQL to fix
+        }
+      }
+    };
 
     try {
-      updateStatus('Formulating SQL query...');
-      const sqlLLMResult = await callLLM(
-        currentProvider,
-        currentModel,
-        currentApiKey,
-        SCHEMA_GROUNDING,
-        `Generate a DuckDB SQL query for this request: "${promptText}". Return ONLY the query wrapped in a \`\`\`sql ... \`\`\` code block.`
-      );
-
-      generatedSQL = extractSQL(sqlLLMResult);
-      console.log('[AI Chat] Generated SQL:', generatedSQL);
-
-      updateStatus('Executing query locally on DuckDB...');
-      const queryResult = await query(generatedSQL);
-      duckdbRows = queryResult.toArray();
-      const cleanedRows = cleanQueryResults(duckdbRows);
-      console.log('[AI Chat] Query rows count:', cleanedRows.length);
-
-      duckdbRows.forEach((row: any) => {
-        if (row.seg_id !== undefined && row.seg_id !== null) {
-          const id = Number(row.seg_id);
-          if (!isNaN(id)) segIds.push(id);
-        }
-      });
-
-      if (segIds.length > 0) {
-        highlightAndZoomToSegments(segIds);
-      }
+      await executeSQL();
 
       updateStatus('Analyzing results & drafting insights...');
       const summarySystemPrompt = `You are a professional transportation safety analyst.
 The user asked a safety question. We ran a DuckDB query on local Philly street segment datasets to fetch grounded facts.
 Analyze the query results and summarize the findings into a concise, human-readable safety insight.
+Format the response in Markdown: use **bold** for street names and key statistics, short bullet lists for findings, and a compact table only when comparing several segments side by side.
 Do NOT output raw code or raw JSON. Keep it professional and focus on high risk indexes, crashes, speed limits, lack of bike lanes, canopy cover, or other variables.
 Suggest safety improvements or highlighting observations.`;
 
