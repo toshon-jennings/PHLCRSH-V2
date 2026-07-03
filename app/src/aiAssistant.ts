@@ -36,7 +36,7 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - st_name (VARCHAR): Street name (e.g., "Broad", "Market").
 - st_type (VARCHAR): Street suffix (e.g., "St", "Ave", "Blvd").
 - class (INTEGER): Functional classification code (1: Expressway, 2: Major Arterial, 3: Minor Arterial, 4: Collector, 5: Local, 9: Ramp). DO NOT use road_class — it does not exist.
-- length (FLOAT): Segment length in MILES.
+- length (FLOAT): Segment length in feet.
 - cartway_width_ft (FLOAT): Roadway cartway width (curb-to-curb) in feet.
 - width_confidence (VARCHAR): Reliability of the cartway width measurement.
 - maxspeed_final (FLOAT): Posted speed limit in mph.
@@ -49,9 +49,9 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - state_divisor_type (VARCHAR): Median separator ("Divided", "Undivided", "Barrier").
 - state_road_distance (FLOAT): Feet to nearest State Road centerline.
 - GEOID (VARCHAR): Census block group identifier for the segment midpoint.
-- dvrpc_aadt (FLOAT): Average Daily Traffic from DVRPC counts.
-- has_aadt (INTEGER): Binary (1: has DVRPC AADT; 0: imputed).
-- adt (FLOAT): Final best-available Average Daily Traffic.
+- dvrpc_aadt (FLOAT): Raw Average Daily Traffic value from DVRPC counts; values below 500 are treated as invalid for exposure math.
+- has_aadt (INTEGER): Binary (1: has valid DVRPC AADT; 0: imputed).
+- adt (FLOAT): Final cleaned Average Daily Traffic. Tiny raw counts below 500 fall back to the road-class estimate.
 - vmt (FLOAT): Daily Vehicle Miles Traveled.
 - risk_index (FLOAT): Normalized Risk Index (crash frequency per million daily vehicle-feet).
 - crash_count (INTEGER): Total snapped crashes.
