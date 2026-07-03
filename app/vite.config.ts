@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/PHLCRSH/',
+  base: '/PHLCRSH-V2/',
   optimizeDeps: {
     exclude: ['@duckdb/duckdb-wasm'],
   },
