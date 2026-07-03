@@ -43,6 +43,8 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] 7.4 Verified in browser (dev server on port 5179, pinned in `.claude/launch.json`): escaped `<img onerror>` injection inert, table/list/blockquote styling correct; `npm run build` clean
 - [x] Phase 8: Notebook UI Design Standardization
   - [x] 8.1 Removed all blue-to-purple decorative gradients from `notebook.html` (progress bar, h1 title, back button, formula block glows)
-  - [x] 8.2 Standardized to solid `var(--color-accent)` (#5a9cf5) and `var(--color-text-strong)` (#ffffff), matching the main portal's exact brand color scheme
-  - [x] 8.3 Successfully rebuilt and validated production build (`v0.1.2`)
+  - [x] 8.2 Standardized to solid `var(--color-accent)` (#5a9cf5) and `var(--color-text-strong)` (#ffffff)
+  - [x] 8.3 Mapped variables (`--color-sidebar-bg: #0f0f1e`, `--color-card-bg: rgba(20, 20, 40, 0.88)`, `--color-text: #e0e0e0`, `--color-muted: #666666`, `--color-secondary: #888888`) and added backdrop glassmorphism to section cards to match the main portal's exact dark mode region style (`v0.1.3`)
+  - [x] 8.4 Successfully rebuilt and validated production build
+
 
