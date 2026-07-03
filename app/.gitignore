@@ -1,3 +1,7 @@
 node_modules/
 dist/
-public/data/
+public/data/*
+!public/data/
+!public/data/philly_block_groups.parquet
+!public/data/philly_neighborhoods.parquet
+!public/data/philly_segments.parquet

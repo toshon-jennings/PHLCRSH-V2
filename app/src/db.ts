@@ -6,8 +6,10 @@ import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 
 const PARQUET_URL = "/PHLCRSH-V2/data/philly_segments.parquet";
 const BG_PARQUET_URL = "/PHLCRSH-V2/data/philly_block_groups.parquet";
+const NEIGHBORHOODS_PARQUET_URL = "/PHLCRSH-V2/data/philly_neighborhoods.parquet";
 const FILE_NAME = 'philly_segments.parquet';
 const BG_FILE_NAME = 'philly_block_groups.parquet';
+const NEIGHBORHOODS_FILE_NAME = 'philly_neighborhoods.parquet';
 const BUNDLES: duckdb.DuckDBBundles = {
   mvp: { mainModule: duckdb_wasm, mainWorker: mvp_worker },
   eh: { mainModule: duckdb_wasm_eh, mainWorker: eh_worker },
@@ -27,7 +29,7 @@ const SEGMENT_COLUMN_DEFAULTS = [
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
 
-  const DB_VERSION = 'v3_roadway_defects';
+  const DB_VERSION = 'v5_roadway_defects';
   const versionKey = 'db_version';
   const currentVersion = localStorage.getItem(versionKey);
   if (currentVersion !== DB_VERSION) {
@@ -36,8 +38,10 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
         const root = await navigator.storage.getDirectory();
         await root.removeEntry(FILE_NAME).catch(() => null);
         await root.removeEntry(BG_FILE_NAME).catch(() => null);
+        await root.removeEntry(NEIGHBORHOODS_FILE_NAME).catch(() => null);
         localStorage.removeItem(`etag:${FILE_NAME}`);
         localStorage.removeItem(`etag:${BG_FILE_NAME}`);
+        localStorage.removeItem(`etag:${NEIGHBORHOODS_FILE_NAME}`);
         console.log('[db] Old OPFS cache cleared for version:', DB_VERSION);
       } catch (e) {
         console.warn('Failed to clear old OPFS files:', e);
@@ -66,6 +70,7 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
     await conn.query('INSTALL spatial; LOAD spatial;');
     await createSegmentsView(conn);
     await conn.query(`CREATE OR REPLACE VIEW block_groups AS SELECT * FROM read_parquet('${BG_FILE_NAME}')`);
+    await conn.query(`CREATE OR REPLACE VIEW neighborhoods AS SELECT * FROM read_parquet('${NEIGHBORHOODS_FILE_NAME}')`);
   } finally {
     await conn.close();
   }
@@ -98,26 +103,30 @@ export async function query(sql: string, db?: duckdb.AsyncDuckDB) {
 async function registerParquetFiles(db: duckdb.AsyncDuckDB, storageMode: StorageMode) {
   if (storageMode === 'chromium-opfs') {
     try {
-      const [segHandle, bgHandle] = await Promise.all([
+      const [segHandle, bgHandle, nhHandle] = await Promise.all([
         getOrFetchHandle(FILE_NAME, PARQUET_URL),
         getOrFetchHandle(BG_FILE_NAME, BG_PARQUET_URL),
+        getOrFetchHandle(NEIGHBORHOODS_FILE_NAME, NEIGHBORHOODS_PARQUET_URL),
       ]);
       await db.registerFileHandle(FILE_NAME, segHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
       await db.registerFileHandle(BG_FILE_NAME, bgHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
+      await db.registerFileHandle(NEIGHBORHOODS_FILE_NAME, nhHandle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
       console.log('[db] parquet files registered from OPFS handles');
       return;
     } catch (e) {
       console.warn('[db] OPFS parquet registration failed, using in-memory parquet buffers:', e);
-      await db.dropFiles([FILE_NAME, BG_FILE_NAME]).catch(() => null);
+      await db.dropFiles([FILE_NAME, BG_FILE_NAME, NEIGHBORHOODS_FILE_NAME]).catch(() => null);
     }
   }
 
-  const [segmentBytes, blockGroupBytes] = await Promise.all([
+  const [segmentBytes, blockGroupBytes, neighborhoodBytes] = await Promise.all([
     fetchParquetBytes(PARQUET_URL),
     fetchParquetBytes(BG_PARQUET_URL),
+    fetchParquetBytes(NEIGHBORHOODS_PARQUET_URL),
   ]);
   await db.registerFileBuffer(FILE_NAME, segmentBytes);
   await db.registerFileBuffer(BG_FILE_NAME, blockGroupBytes);
+  await db.registerFileBuffer(NEIGHBORHOODS_FILE_NAME, neighborhoodBytes);
   console.log('[db] parquet files registered from fetched buffers');
 }
 

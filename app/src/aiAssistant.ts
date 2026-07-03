@@ -72,13 +72,30 @@ Contains census block groups. Columns:
 - median_income (INTEGER): Median household income in USD.
 - geometry (GEOMETRY): Polygon boundary geometry of the census block group (EPSG:4326).
 
+3. 'neighborhoods'
+Contains neighborhood boundaries. Columns:
+- name (VARCHAR): Uppercase neighborhood name with underscores (e.g., 'CENTER_CITY', 'UNIVERSITY_CITY', 'CHESTNUT_HILL', 'MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
+- listname (VARCHAR): Human-readable list name (e.g., 'Center City East', 'University City', 'Chestnut Hill', 'Mount Airy, East', 'Mount Airy, West').
+- mapname (VARCHAR): Human-readable map name (e.g., 'Center City East', 'University City', 'West Mount Airy').
+- geometry (GEOMETRY): Polygon/MultiPolygon boundary geometry of the neighborhood (EPSG:4326).
+
 CRITICAL RULES:
 1. ALWAYS select 'seg_id' as a column in your query if the query returns street segments. This is required to highlight them on the map.
-2. DuckDB has spatial support, so you can perform spatial filters or joins if needed. Do NOT call spatial functions on non-geometry columns.
+2. DuckDB has spatial support, so you can perform spatial filters or joins if needed. Do NOT call spatial functions on non-geometry columns. Use geometry columns ('geometry') directly without ST_GeomFromWKB.
 3. Do NOT make up columns. Use only columns listed above.
 4. Output ONLY valid SQL. Do not include markdown explanations. You MUST wrap the query in \`\`\`sql ... \`\`\` code blocks.
-5. For South Philadelphia or general neighborhoods: Philadelphia FIPS code starts with "42101". South Philly block groups generally have GEOIDs starting with "42101000100" to "42101005000" or similar. You can do a filter on \`GEOID LIKE '4210100%'\`.
-6. To avoid browser crashes, ALWAYS append a \`LIMIT 20\` to the query unless the user explicitly requests more.
+5. For neighborhood-aware queries (e.g., "Mt. Airy", "Center City", "University City", "Chestnut Hill"):
+   Perform a spatial join (ST_Intersects) between 'segments' and 'neighborhoods' using their geometry columns.
+   Example:
+   \`\`\`sql
+   SELECT s.seg_id, s.st_name, s.crash_count
+   FROM segments s
+   JOIN neighborhoods n ON ST_Intersects(s.geometry, n.geometry)
+   WHERE n.name = 'CHESTNUT_HILL'
+   \`\`\`
+   Note: For "Mt. Airy", filter for name LIKE '%MOUNT_AIRY%' or join matching name IN ('MOUNT_AIRY_EAST', 'MOUNT_AIRY_WEST').
+6. For South Philadelphia or general neighborhoods by FIPS: Philadelphia FIPS code starts with "42101". South Philly block groups generally have GEOIDs starting with "42101000100" to "42101005000" or similar. You can do a filter on \`GEOID LIKE '4210100%'\`.
+7. To avoid browser crashes, ALWAYS append a \`LIMIT 20\` to the query unless the user explicitly requests more.
 `;
 
 function extractSQL(text: string): string {
