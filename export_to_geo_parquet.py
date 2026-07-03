@@ -43,6 +43,8 @@ keep_cols = [
     "calming_device_count",
     "dvrpc_aadt",
     "has_aadt",
+    "state_aadt",
+    "adt_source",
     "canopy_pct",
     "tree_count",
     "grade_range_smooth",

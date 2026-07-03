@@ -1,8 +1,8 @@
-"""DVRPC traffic counts (AADT).
+"""DVRPC traffic count context.
 
-Coverage is solid on major arterials but sparse on residential streets.
-We attribute the AADT of the nearest count station within 500 ft to a
-segment, and flag segments that got a match.
+DVRPC's `volume` field is not guaranteed to be AADT; the service includes
+short-duration, bicycle, pedestrian, and class-count records. Keep these
+values as raw traffic-count context, not as the measured exposure denominator.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import requests
 
 from .common import raw, transformed, to_2272_file
 
-AADT_SNAP_FT = 500
+COUNT_SNAP_FT = 500
 
 
 def load_traffic_counts(year: int = 2024) -> gpd.GeoDataFrame:
@@ -42,9 +42,9 @@ def load_traffic_counts(year: int = 2024) -> gpd.GeoDataFrame:
 def join_aadt_to_segments(
     counts: gpd.GeoDataFrame,
     centerlines: gpd.GeoDataFrame,
-    max_dist_ft: float = AADT_SNAP_FT,
+    max_dist_ft: float = COUNT_SNAP_FT,
 ) -> pd.DataFrame:
-    """Nearest count station per segment within max_dist_ft. Returns seg_id + AADT."""
+    """Nearest count station per segment within max_dist_ft. Returns raw volume."""
     matched = gpd.sjoin_nearest(
         centerlines[["seg_id", "geometry"]],
         counts[["volume", "geometry"]],

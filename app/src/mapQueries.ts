@@ -17,6 +17,7 @@ export type SegmentProperties = {
 
   // Phase 1: Exposure & Severity Baselining
   adt: number | null;
+  adt_source: string | null;
   vmt: number | null;
   risk_index: number | null;
   has_fatality: number | null;
@@ -113,6 +114,7 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
     class                               AS road_class,
     state_divisor_type,
     CAST(adt AS FLOAT)                  AS adt,
+    adt_source,
     CAST(vmt AS FLOAT)                  AS vmt,
     CAST(risk_index AS FLOAT)           AS risk_index,
     CAST(length AS FLOAT)               AS length,
@@ -157,6 +159,7 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
       adt: r.adt,
+      adt_source: r.adt_source,
       vmt: r.vmt,
       risk_index: r.risk_index,
       length: r.length,
@@ -273,6 +276,7 @@ function rowToStoryFocalExample(r: any): StoryFocalExample {
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
       adt: r.adt,
+      adt_source: r.adt_source,
       vmt: r.vmt,
       risk_index: r.risk_index,
       length: r.length,
@@ -320,6 +324,7 @@ export async function loadStoryFocalExamples(storyId: string): Promise<StoryFoca
     class                               AS road_class,
     state_divisor_type,
     CAST(adt AS FLOAT)                  AS adt,
+    adt_source,
     CAST(vmt AS FLOAT)                  AS vmt,
     CAST(risk_index AS FLOAT)           AS risk_index,
     CAST(length AS FLOAT)               AS length,
@@ -463,6 +468,7 @@ export type LeaderboardEntry = {
   crash_count: number;
   risk_index: number;
   adt: number;
+  adt_source: string | null;
 };
 
 export async function loadVisibleLeaderboard(
@@ -482,7 +488,8 @@ export async function loadVisibleLeaderboard(
       CASE WHEN adt > 0 AND length > 0
            THEN (CAST(${colName} AS FLOAT) * 1000000.0) / (CAST(adt AS FLOAT) * CAST(length AS FLOAT))
            ELSE 0.0 END                   AS risk_index,
-      CAST(adt AS FLOAT)                  AS adt
+      CAST(adt AS FLOAT)                  AS adt,
+      adt_source
     FROM segments
     WHERE ST_Intersects(geometry, ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}))
       AND ${colName} > 0
@@ -498,5 +505,6 @@ export async function loadVisibleLeaderboard(
     crash_count: r.crash_count,
     risk_index: r.risk_index,
     adt: r.adt,
+    adt_source: r.adt_source,
   }));
 }

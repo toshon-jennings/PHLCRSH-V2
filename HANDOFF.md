@@ -64,4 +64,8 @@ Evolve the PHLCRSH dashboard from a static spatial correlation viewer into a dyn
   - [x] 11.2 Added a browser-side DuckDB view guard: `adt < 500` falls back to the functional-class estimate, `has_aadt` becomes false, and `risk_index`/`vmt` are recomputed from cleaned exposure.
   - [x] 11.3 Updated `build_final_table.py` so future data rebuilds apply the same 500-vehicle validity floor, support numeric class fallbacks, and keep `length` in feet while deriving VMT from miles.
   - [x] 11.4 Updated AI assistant/data dictionary/About wording to clarify cleaned AADT and feet-based Risk Index; verified `npm run build`, local DuckDB view syntax, and dev server on port 5179.
-
+- [x] Phase 12: Correct DVRPC Volume Semantics
+  - [x] 12.1 Verified live DVRPC records such as Germantown Avenue report `type = "15 min Volume"`, proving DVRPC `volume` is not reliable AADT.
+  - [x] 12.2 Replaced the threshold-based guard with explicit source handling: browser `adt` uses PennDOT `state_aadt` only when available, otherwise class exposure estimates; DVRPC volume remains raw context.
+  - [x] 12.3 UI labels now show measured `AADT` only for `adt_source = state_aadt`; fallback values render as `Exposure est.` / `est.` rather than cars/day.
+  - [x] 12.4 Updated AI/schema/docs/pipeline/export wording so future rebuilds preserve `state_aadt` and `adt_source` and do not treat DVRPC volume as AADT.

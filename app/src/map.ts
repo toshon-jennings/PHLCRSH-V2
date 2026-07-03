@@ -26,6 +26,13 @@ import {
   type LayerGroup,
 } from './mapLayers';
 
+function formatExposureValue(value: number | null | undefined, source: string | null | undefined) {
+  const formatted = value != null ? value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+  return source === 'state_aadt'
+    ? { label: 'AADT', value: formatted }
+    : { label: 'Exposure est.', value: formatted === '—' ? '—' : `${formatted} est.` };
+}
+
 function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const row = (label: string, value: string) =>
     `<div class="seg-row"><span>${label}</span><strong>${value}</strong></div>`;
@@ -34,13 +41,13 @@ function segmentPopupHTML(p: Partial<SegmentProperties>) {
   const grade = p.grade_range_smooth != null ? `${(p.grade_range_smooth * 100).toFixed(1)}%` : '—';
   const speed = p.maxspeed_final != null ? `${(+p.maxspeed_final).toFixed(0)} mph` : '—';
   const riskIndex = p.risk_index != null ? p.risk_index.toFixed(2) : '—';
-  const adt = p.adt != null ? p.adt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+  const exposure = formatExposureValue(p.adt, p.adt_source);
   const defects = p.roadway_defect_count != null ? String(p.roadway_defect_count) : '—';
   return `<div class="seg-popup">
     ${row('Risk Index', riskIndex)}
     ${row('Crashes', String(p.crash_count ?? '—'))}
     ${row('311 Defects', defects)}
-    ${row('ADT', adt)}
+    ${row(exposure.label, exposure.value)}
     ${row('Canopy', canopy)}
     ${row('Grade', grade)}
     ${row('Speed', speed)}
@@ -609,11 +616,12 @@ export async function initMap(container: string) {
     const deltaStr = delta != null
       ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ft vs state` : null;
     const deltaCls = delta != null && Math.abs(delta) > 3 ? (delta > 0 ? ' warn' : ' good') : '';
+    const exposure = formatExposureValue(p.adt, p.adt_source);
 
     const rows: [string, string, string][] = [
       ['Risk Index', p.risk_index != null ? p.risk_index.toFixed(2) : '—', ''],
       ['Crashes', fmt(p.crash_count, ''), ''],
-      ['ADT', p.adt != null ? p.adt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', ''],
+      [exposure.label, exposure.value, ''],
       ['VMT (Daily)', p.vmt != null ? p.vmt.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', ''],
       ['Canopy', fmt(p.canopy_pct != null ? p.canopy_pct * 100 : null, '%'), ''],
       ['Grade', fmt(p.grade_range_smooth != null ? p.grade_range_smooth * 100 : null, '%', 1), ''],
@@ -736,6 +744,7 @@ export async function initMap(container: string) {
 
       leaderboardEl.innerHTML = entries.map(entry => {
         const name = [entry.st_name, entry.st_type].filter(Boolean).join(' ') || 'Unnamed Segment';
+        const exposure = formatExposureValue(entry.adt, entry.adt_source);
         return `
           <div class="leaderboard-item" data-seg-id="${entry.seg_id}" style="padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: background 0.12s;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
@@ -744,7 +753,7 @@ export async function initMap(container: string) {
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 9.5px; color: var(--color-secondary); gap: 8px;">
               <span style="text-transform: capitalize;">${entry.road_class || 'Local'}</span>
-              <span style="white-space: nowrap;">${entry.crash_count} crashes / ${entry.adt ? entry.adt.toLocaleString() : '—'} ADT</span>
+              <span style="white-space: nowrap;">${entry.crash_count} crashes / ${exposure.value}</span>
             </div>
           </div>
         `;

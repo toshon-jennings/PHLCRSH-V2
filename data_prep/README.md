@@ -11,7 +11,7 @@ data_prep/
   state_roads.py            PennDOT state roads (lanes, width, AADT, dividers)
   traffic_calming.py        Calming devices per segment
   intersection_controls.py  Stop signs and signals per segment
-  traffic_counts.py         DVRPC AADT (nearest station within 500ft)
+  traffic_counts.py         DVRPC raw traffic-count context (nearest station within 500ft)
   osm_features.py           OSM speed limits and lane counts
   roadway_defects.py        311 Street Defect / Street Paving requests per segment
   census.py                 Block groups + ACS 5-year variables
@@ -54,7 +54,7 @@ layer `segments`. One row per driveable centerline segment.
 - PennDOT `TOTAL_WIDT` was NOT used to calibrate transect-derived widths
   because of near-zero correlation (see `widths.py` docstring)
 - Crash snap distance to nearest centerline: 75 ft
-- AADT snap distance: 500 ft (coverage limitation acknowledged in writeup)
+- DVRPC traffic-count snap distance: 500 ft (raw context only; not treated as AADT)
 - 311 Street Defect and Street Paving requests are pulled from the City CARTO
   `public_cases_fc` table and snapped to the nearest centerline within 100 ft
 - Canopy class `1` confirmed as tree canopy from PASDA metadata
