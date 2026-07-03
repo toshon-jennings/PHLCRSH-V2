@@ -47,15 +47,11 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - state_total_width_ft (FLOAT): Total roadway width from State Road attributes.
 - state_lane_cnt (INTEGER): Number of lanes from State Road data.
 - state_divisor_type (VARCHAR): Median separator ("Divided", "Undivided", "Barrier").
-- state_aadt (FLOAT): PennDOT state-road AADT where present; NULL for most local/city streets in the current browser dataset.
+- state_aadt (FLOAT): PennDOT state-road AADT where present; NULL for most local/city streets — PennDOT only surveys state-owned roads, so this is NULL for the vast majority of segments.
 - state_road_distance (FLOAT): Feet to nearest State Road centerline.
 - GEOID (VARCHAR): Census block group identifier for the segment midpoint.
-- dvrpc_aadt (FLOAT): Legacy/raw DVRPC traffic-count volume. Do NOT treat this as AADT; the source service includes 15-minute, bicycle, pedestrian, and class-count records.
-- has_aadt (INTEGER): Binary (1: measured PennDOT state_aadt is present; 0: exposure is estimated).
-- adt (FLOAT): Exposure denominator used for risk. This is measured AADT only when adt_source = 'state_aadt'; otherwise it is a functional-class estimate.
-- adt_source (VARCHAR): 'state_aadt' for measured PennDOT AADT, otherwise 'class_estimate'.
-- vmt (FLOAT): Daily Vehicle Miles Traveled.
-- risk_index (FLOAT): Normalized Risk Index (crash frequency per million daily vehicle-feet).
+- dvrpc_aadt (FLOAT): Raw DVRPC traffic-count volume. Do NOT treat this as AADT or use it for any rate/normalization query; the source service mixes 15-minute, bicycle, pedestrian, and class-count records, so it is not a reliable vehicle count.
+- crash_density (FLOAT): Crashes per 1,000 ft of segment length (crash_count * 1000.0 / length). This is the app's crash-rate metric — it deliberately does NOT normalize by traffic volume, because no reliable per-segment volume exists for most Philadelphia streets. Prefer this over raw crash_count when comparing segments of different lengths.
 - crash_count (INTEGER): Total snapped crashes.
 - fatal_count (INTEGER): Number of fatal crashes.
 - injury_count (INTEGER): Number of general injury crashes.
@@ -79,7 +75,7 @@ Represents street centerline segments. Actual columns (verified against parquet 
 - roadway_open_request_count (INTEGER): Open 311 roadway-condition requests.
 - geometry (GEOMETRY): LineString (EPSG:4326).
 
-NEVER use these columns (they DO NOT exist and will cause a database error — the query will fail): road_class, susp_serious_inj_count, ped_count, bicycle_count, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count.
+NEVER use these columns (they DO NOT exist and will cause a database error — the query will fail): road_class, susp_serious_inj_count, ped_count, bicycle_count, osm_lanes, osm_maxspeed, osm_highway, maxspeed_inferred, has_any_control, oneway, tree_count, adt, adt_source, vmt, risk_index, has_aadt.
 If you need pedestrian or bicycle crash data: use crash_count (total crashes). There are no separate ped_count or bicycle_count columns.\n
 2. 'block_groups'
 Contains census block groups. Columns:
@@ -114,7 +110,10 @@ function escapeHTML(text: string): string {
 }
 
 function renderMarkdown(text: string): string {
-  const rawHtml = marked.parse(text, { async: false, gfm: true, breaks: true });
+  const renderer = new marked.Renderer();
+  const originalTable = renderer.table.bind(renderer);
+  renderer.table = (...args) => `<div class="table-scroll">${originalTable(...args)}</div>`;
+  const rawHtml = marked.parse(text, { async: false, gfm: true, breaks: true, renderer });
   return DOMPurify.sanitize(rawHtml);
 }
 
@@ -675,7 +674,7 @@ export function initAIAssistant() {
           View Data (${msg.rows.length} rows)
         </button>
         <div id="${dataId}" style="display: none; margin-top: 6px;">
-          <table><thead><tr>${tableHead}</tr></thead><tbody>${tableBody}</tbody></table>
+          <div class="table-scroll"><table><thead><tr>${tableHead}</tr></thead><tbody>${tableBody}</tbody></table></div>
         </div>
       `;
     }
