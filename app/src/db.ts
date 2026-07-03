@@ -4,9 +4,8 @@ import mvp_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?ur
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
-const isDev = import.meta.env.DEV;
-const PARQUET_URL = isDev ? "/PHLCRSH-V2/data/philly_segments.parquet" : "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_segments.parquet";
-const BG_PARQUET_URL = isDev ? "/PHLCRSH-V2/data/philly_block_groups.parquet" : "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_block_groups.parquet";
+const PARQUET_URL = "/PHLCRSH-V2/data/philly_segments.parquet";
+const BG_PARQUET_URL = "/PHLCRSH-V2/data/philly_block_groups.parquet";
 const FILE_NAME = 'philly_segments.parquet';
 const BG_FILE_NAME = 'philly_block_groups.parquet';
 const BUNDLES: duckdb.DuckDBBundles = {
