@@ -47,21 +47,10 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
 
   let storageMode: StorageMode = 'memory';
   if (supportsChromiumOPFS()) {
-    try {
-      await db.open({
-        path: 'opfs://phlcrsh.db',
-        accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
-      });
-      storageMode = 'chromium-opfs';
-      console.log('[db] opened with OPFS backing');
-    } catch (e) {
-      console.warn('[db] OPFS unavailable, falling back to in-memory:', e);
-      await db.open({ path: ':memory:' });
-    }
-  } else {
-    console.log('[db] non-Chromium browser detected, using in-memory backing');
-    await db.open({ path: ':memory:' });
+    storageMode = 'chromium-opfs';
   }
+  await db.open({ path: ':memory:' });
+  console.log('[db] opened with in-memory backing. OPFS cache mode:', storageMode);
 
   await registerParquetFiles(db, storageMode);
 
