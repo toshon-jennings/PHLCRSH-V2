@@ -762,7 +762,7 @@ snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre
   <script>
     function toggleCode(header) {
       const body = header.nextElementSibling;
-      const label = header.querySelector('span:last-child');
+      const label = header.lastElementChild;
       const isOpen = body.classList.toggle('is-open');
       label.textContent = isOpen ? '▼ Hide Code' : '▶ Show Code';
     }
