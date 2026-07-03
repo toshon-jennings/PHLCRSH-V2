@@ -17,10 +17,17 @@ let _db: duckdb.AsyncDuckDB | null = null;
 
 type StorageMode = 'chromium-opfs' | 'memory';
 
+const SEGMENT_COLUMN_DEFAULTS = [
+  { name: 'roadway_request_count', expr: '0::INTEGER' },
+  { name: 'roadway_defect_count', expr: '0::INTEGER' },
+  { name: 'roadway_paving_request_count', expr: '0::INTEGER' },
+  { name: 'roadway_open_request_count', expr: '0::INTEGER' },
+];
+
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
 
-  const DB_VERSION = 'v2_combinations';
+  const DB_VERSION = 'v3_roadway_defects';
   const versionKey = 'db_version';
   const currentVersion = localStorage.getItem(versionKey);
   if (currentVersion !== DB_VERSION) {
@@ -57,7 +64,7 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   const conn = await db.connect();
   try {
     await conn.query('INSTALL spatial; LOAD spatial;');
-    await conn.query(`CREATE OR REPLACE VIEW segments AS SELECT * FROM read_parquet('${FILE_NAME}')`);
+    await createSegmentsView(conn);
     await conn.query(`CREATE OR REPLACE VIEW block_groups AS SELECT * FROM read_parquet('${BG_FILE_NAME}')`);
   } finally {
     await conn.close();
@@ -65,6 +72,17 @@ export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   
   _db = db;
   return db;
+}
+
+async function createSegmentsView(conn: duckdb.AsyncDuckDBConnection) {
+  await conn.query(`CREATE OR REPLACE VIEW segments_raw AS SELECT * FROM read_parquet('${FILE_NAME}')`);
+  const describe = await conn.query('DESCRIBE segments_raw');
+  const columns = new Set(describe.toArray().map((row: any) => String(row.column_name)));
+  const defaults = SEGMENT_COLUMN_DEFAULTS
+    .filter(({ name }) => !columns.has(name))
+    .map(({ name, expr }) => `${expr} AS ${name}`);
+  const defaultSelect = defaults.length ? `, ${defaults.join(', ')}` : '';
+  await conn.query(`CREATE OR REPLACE VIEW segments AS SELECT *${defaultSelect} FROM segments_raw`);
 }
 
 export async function query(sql: string, db?: duckdb.AsyncDuckDB) {

@@ -59,6 +59,10 @@ Represents street centerline segments. Columns:
 - crash_count_day_clear (INTEGER), crash_count_day_wet (INTEGER), crash_count_night_clear (INTEGER), crash_count_night_wet (INTEGER)
 - is_school_zone (INTEGER): Binary (1: within 500ft of school; 0: otherwise).
 - high_heat_vulnerability (INTEGER): Binary (1: Heat Vulnerability Index score of 4 or 5; 0: otherwise).
+- roadway_request_count (INTEGER): Total 311 roadway-condition requests snapped to the segment since 2020.
+- roadway_defect_count (INTEGER): 311 Street Defect requests (SR-ST01) snapped to the segment since 2020.
+- roadway_paving_request_count (INTEGER): 311 Street Paving requests (SR-ST23) snapped to the segment since 2020.
+- roadway_open_request_count (INTEGER): Snapped 311 roadway-condition requests that are not closed/canceled.
 - geometry (GEOMETRY): LineString geometry of the centerline segment (EPSG:4326).
 
 2. 'block_groups'

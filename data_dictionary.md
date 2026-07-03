@@ -67,6 +67,14 @@ This table represents individual street centerline segments in Philadelphia, enr
 | **`is_school_zone`** | `INTEGER` | Public Schools buffer | Binary indicator (1: segment falls within a 500ft buffer of a School District of Philadelphia public school; 0: otherwise). |
 | **`high_heat_vulnerability`** | `INTEGER` | PDPH HVI Census join | Binary indicator (1: segment intersects a Census Tract with a Heat Vulnerability Index (HVI) score of 4 or 5; 0: otherwise). |
 
+### 311 Roadway Condition Requests
+| Column Name | Data Type | Source / Calculation | Description |
+| :--- | :--- | :--- | :--- |
+| **`roadway_request_count`** | `INTEGER` | Philly311 CARTO snap | Total 311 roadway-condition requests snapped to the segment since 2020. |
+| **`roadway_defect_count`** | `INTEGER` | Philly311 `SR-ST01` snap | Street Defect requests snapped to the segment since 2020, used as a pothole/surface-failure proxy. |
+| **`roadway_paving_request_count`** | `INTEGER` | Philly311 `SR-ST23` snap | Street Paving requests snapped to the segment since 2020. |
+| **`roadway_open_request_count`** | `INTEGER` | Philly311 status | Snapped roadway-condition requests whose status is not closed/canceled. |
+
 ---
 
 ## 2. Table: `block_groups`

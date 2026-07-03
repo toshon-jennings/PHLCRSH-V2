@@ -76,6 +76,11 @@ keep_cols = [
     # Phase 4
     "is_school_zone",
     "high_heat_vulnerability",
+    # 311 roadway condition requests
+    "roadway_request_count",
+    "roadway_defect_count",
+    "roadway_paving_request_count",
+    "roadway_open_request_count",
     "geometry",
 ]
 

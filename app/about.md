@@ -23,6 +23,7 @@ In July 2026, the application was upgraded from a static count viewer into a dyn
 - **Phase 2: Micro-Infrastructure & Right-of-Way**: Integrated the City of Philadelphia's Bike Network, snapping bike facilities to centerline midpoints and classifying them into Protected, Painted, or Sharrow tiers. Also categorized intersections into Signalized, Stop-Controlled, or Uncontrolled types.
 - **Phase 3: Temporal & Environmental Dynamics**: Implemented dynamic day/night and clear/wet crash slices. Streetlight density (Street Poles counts within a 50ft buffer) is mapped as a proxy for nighttime illumination. Sun-glare prone corridors are flagged automatically using geometric bearing calculations for segments running directly East-West (azimuth $75^\circ\text{–}105^\circ$ or $255^\circ\text{–}285^\circ$).
 - **Phase 4: Equity & Climate Vulnerability Overlays**: Joined census block group geometry to School District of Philadelphia facility points and the CDC-aligned Heat Vulnerability Index (HVI) tracts. Segments intersecting school zones (500ft buffer) or high heat vulnerability tracts (HVI $\ge 4$) are flagged for equity overlay analysis.
+- **311 Roadway Defect Overlay**: Pulls Philly311 Street Defect (`SR-ST01`) and Street Paving (`SR-ST23`) requests from the City CARTO `public_cases_fc` table, builds point geometry from published longitude/latitude fields, and snaps requests to nearby street centerline segments.
 
 ## Credits & Contributions
 
@@ -44,6 +45,7 @@ OpenDataPhilly is the main catalog for the Philadelphia-specific public datasets
 - Streetlight poles: [OpenDataPhilly Street Poles ArcGIS service](https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Street_Poles/FeatureServer/0).
 - Public schools: [School District of Philadelphia Schools ArcGIS service](https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Schools/FeatureServer/0).
 - Heat vulnerability: [Philadelphia Department of Public Health HVI ArcGIS service](https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/heat_vulnerability_ct/FeatureServer/0).
+- 311 roadway condition requests: [OpenDataPhilly 311 Service and Information Requests](https://opendataphilly.org/datasets/311-service-and-information-requests/), queried from the City CARTO `public_cases_fc` table.
 - Census demographics: [Census 2024 ACS 5-year API](https://api.census.gov/data/2024/acs/acs5.html), including population and median household income estimates.
 - Census block-group geometry: [Census TIGER/Line shapefiles](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html).
 - Basemap: [CARTO basemaps](https://carto.com/basemaps) with [OpenStreetMap](https://www.openstreetmap.org/copyright) data attribution.

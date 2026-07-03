@@ -42,6 +42,12 @@ export type SegmentProperties = {
   // Phase 4: Equity & Climate Vulnerability Overlays
   is_school_zone: number | null;
   high_heat_vulnerability: number | null;
+
+  // 311 roadway condition requests
+  roadway_request_count: number | null;
+  roadway_defect_count: number | null;
+  roadway_paving_request_count: number | null;
+  roadway_open_request_count: number | null;
 };
 
 export type SegmentFeature = {
@@ -126,6 +132,10 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
     CAST(is_glare_prone AS INTEGER)     AS is_glare_prone,
     CAST(is_school_zone AS INTEGER)     AS is_school_zone,
     CAST(high_heat_vulnerability AS INTEGER) AS high_heat_vulnerability,
+    CAST(roadway_request_count AS INTEGER) AS roadway_request_count,
+    CAST(roadway_defect_count AS INTEGER) AS roadway_defect_count,
+    CAST(roadway_paving_request_count AS INTEGER) AS roadway_paving_request_count,
+    CAST(roadway_open_request_count AS INTEGER) AS roadway_open_request_count,
     ST_AsGeoJSON(geometry)              AS geojson
   FROM segments
 `);
@@ -166,6 +176,10 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
       is_glare_prone: r.is_glare_prone,
       is_school_zone: r.is_school_zone,
       high_heat_vulnerability: r.high_heat_vulnerability,
+      roadway_request_count: r.roadway_request_count,
+      roadway_defect_count: r.roadway_defect_count,
+      roadway_paving_request_count: r.roadway_paving_request_count,
+      roadway_open_request_count: r.roadway_open_request_count,
     },
     geometry: JSON.parse(r.geojson),
   }));
@@ -278,6 +292,10 @@ function rowToStoryFocalExample(r: any): StoryFocalExample {
       is_glare_prone: r.is_glare_prone,
       is_school_zone: r.is_school_zone,
       high_heat_vulnerability: r.high_heat_vulnerability,
+      roadway_request_count: r.roadway_request_count,
+      roadway_defect_count: r.roadway_defect_count,
+      roadway_paving_request_count: r.roadway_paving_request_count,
+      roadway_open_request_count: r.roadway_open_request_count,
     },
     geometry: JSON.parse(r.geojson),
   };
@@ -321,6 +339,10 @@ export async function loadStoryFocalExamples(storyId: string): Promise<StoryFoca
     CAST(is_glare_prone AS INTEGER)     AS is_glare_prone,
     CAST(is_school_zone AS INTEGER)     AS is_school_zone,
     CAST(high_heat_vulnerability AS INTEGER) AS high_heat_vulnerability,
+    CAST(roadway_request_count AS INTEGER) AS roadway_request_count,
+    CAST(roadway_defect_count AS INTEGER) AS roadway_defect_count,
+    CAST(roadway_paving_request_count AS INTEGER) AS roadway_paving_request_count,
+    CAST(roadway_open_request_count AS INTEGER) AS roadway_open_request_count,
     ST_AsGeoJSON(geometry)              AS geojson
   `;
 

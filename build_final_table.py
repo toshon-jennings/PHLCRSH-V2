@@ -63,6 +63,7 @@ from data_prep.trees import load_trees, count_trees_per_segment
 from data_prep.bike_network import load_bike_network, join_bike_network_to_segments
 from data_prep.streetlights import load_streetlights, aggregate_streetlights_to_segments
 from data_prep.equity import load_schools, load_heat_vulnerability, flag_school_zones, flag_heat_vulnerability
+from data_prep.roadway_defects import load_roadway_defects, aggregate_roadway_defects_to_segments
 
 
 OUTPUT_PATH = stash("philly_final_analytical_table.gpkg")
@@ -241,6 +242,25 @@ def build() -> gpd.GeoDataFrame:
     except Exception as e:
         print(f"Warning: Failed to load heat vulnerability ({e}), using fallback.")
         cl["high_heat_vulnerability"] = 0
+
+    print("Joining 311 Roadway Defects...")
+    try:
+        roadway_requests = load_roadway_defects()
+        roadway_agg = aggregate_roadway_defects_to_segments(roadway_requests, cl)
+        cl = _left_merge(cl, roadway_agg)
+        for c in [
+            "roadway_request_count",
+            "roadway_defect_count",
+            "roadway_paving_request_count",
+            "roadway_open_request_count",
+        ]:
+            cl[c] = cl[c].fillna(0).astype(int)
+    except Exception as e:
+        print(f"Warning: Failed to load 311 roadway defects ({e}), using fallback.")
+        cl["roadway_request_count"] = 0
+        cl["roadway_defect_count"] = 0
+        cl["roadway_paving_request_count"] = 0
+        cl["roadway_open_request_count"] = 0
 
     return cl
 

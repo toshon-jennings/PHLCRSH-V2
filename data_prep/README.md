@@ -13,6 +13,7 @@ data_prep/
   intersection_controls.py  Stop signs and signals per segment
   traffic_counts.py         DVRPC AADT (nearest station within 500ft)
   osm_features.py           OSM speed limits and lane counts
+  roadway_defects.py        311 Street Defect / Street Paving requests per segment
   census.py                 Block groups + ACS 5-year variables
   canopy.py                 Tree canopy % from 2018 land cover raster
   elevation.py              Grade per segment from 3ft DEM
@@ -54,4 +55,6 @@ layer `segments`. One row per driveable centerline segment.
   because of near-zero correlation (see `widths.py` docstring)
 - Crash snap distance to nearest centerline: 75 ft
 - AADT snap distance: 500 ft (coverage limitation acknowledged in writeup)
+- 311 Street Defect and Street Paving requests are pulled from the City CARTO
+  `public_cases_fc` table and snapped to the nearest centerline within 100 ft
 - Canopy class `1` confirmed as tree canopy from PASDA metadata
