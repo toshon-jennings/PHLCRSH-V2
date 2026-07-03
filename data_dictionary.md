@@ -52,7 +52,7 @@ This table represents individual street centerline segments in Philadelphia, enr
 | Column Name | Data Type | Source / Calculation | Description |
 | :--- | :--- | :--- | :--- |
 | **`nighttime_illumination`** | `FLOAT` | Street Poles buffer | Streetlight pole density proxy (number of streetlight poles counted within a 50ft buffer of the segment centerline). |
-| **`is_glare_prone`** | `INTEGER` | Compass Bearing | Binary indicator (1: segment runs directly East-West (bearing azimuth $75^\circ\text{-}105^\circ$ or $255^\circ\text{-}285^\circ$), making drivers prone to sunrise/sunset sun glare; 0: otherwise). |
+| **`is_glare_prone`** | `INTEGER` | Compass Bearing | Binary indicator (1: segment runs directly East-West (bearing azimuth 75°–105° or 255°–285°), making drivers prone to sunrise/sunset sun glare; 0: otherwise). |
 | **`crash_count_day`** | `INTEGER` | PennDOT (6 AM - 6 PM) | Crashes occurring during daylight hours. |
 | **`crash_count_night`** | `INTEGER` | PennDOT (6 PM - 6 AM) | Crashes occurring during nighttime hours. |
 | **`crash_count_clear`** | `INTEGER` | PennDOT Weather = 1 | Crashes occurring under clear, dry weather conditions. |
