@@ -397,7 +397,7 @@ export function initAIAssistant() {
   chatBubble.className = 'ai-chat-bubble';
   chatBubble.setAttribute('aria-label', 'Open safety assistant');
   chatBubble.setAttribute('aria-haspopup', 'true');
-  chatBubble.innerHTML = `<img src="/favicon.png" width="26" height="26" alt="Safety Assistant" draggable="false">`;
+  chatBubble.innerHTML = `<img src="/PHLCRSH-V2/favicon.png" width="26" height="26" alt="Safety Assistant" draggable="false">`;
 
   const chatPanel = document.createElement('div');
   chatPanel.id = 'ai-chat-panel';
@@ -406,7 +406,7 @@ export function initAIAssistant() {
   chatPanel.innerHTML = `
     <div class="ai-panel-header">
       <div class="ai-panel-title-area">
-        <img src="/favicon.png" class="ai-title-icon" width="16" height="16" alt="Safety Icon">
+        <img src="/PHLCRSH-V2/favicon.png" class="ai-title-icon" width="16" height="16" alt="Safety Icon">
         <span class="ai-panel-title">Safety Assistant</span>
       </div>
       <div class="ai-panel-actions">
