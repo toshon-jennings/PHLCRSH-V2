@@ -77,24 +77,25 @@
     
     .notebook-container {
       display: flex;
-      max-width: 1440px;
-      margin: 0 auto;
+      max-width: 100%;
+      margin: 0;
       position: relative;
     }
     
     /* Left Sticky Nav Sidebar */
     .notebook-sidebar {
-      width: 320px;
+      width: 280px;
+      flex-shrink: 0;
       border-right: 1px solid var(--border-thin);
       background: var(--color-sidebar-bg);
-      padding: var(--space-32) var(--space-24);
+      padding: var(--space-24) var(--space-16);
       position: sticky;
       top: 0;
       height: 100vh;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: var(--space-24);
+      gap: var(--space-16);
     }
     
     .notebook-sidebar h3 {
@@ -141,8 +142,8 @@
     /* Main Reading Content Area */
     .notebook-content {
       flex: 1;
-      padding: var(--space-48) 64px var(--space-48) 48px;
-      max-width: 960px;
+      min-width: 0;
+      padding: var(--space-48) 48px var(--space-48) 32px;
     }
     
     /* Header Card */
@@ -397,16 +398,18 @@
       background: rgba(255, 255, 255, 0.03);
       color: var(--color-text-strong);
       text-align: left;
-      padding: 12px var(--space-16);
+      padding: 10px 14px;
       font-weight: 600;
       border-bottom: 2px solid var(--border-panel);
       font-family: var(--font-display);
+      white-space: nowrap;
     }
     
     td {
-      padding: 12px var(--space-16);
+      padding: 10px 14px;
       border-bottom: 1px solid var(--border-thin);
       color: var(--color-text);
+      white-space: nowrap;
     }
     
     tr:last-child td {
