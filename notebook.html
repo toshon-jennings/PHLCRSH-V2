@@ -487,7 +487,7 @@
           This study examines how street design (cartway width, speed, micro-infrastructure) and environmental features (tree canopy, elevation grade) correlate with automobile crash frequencies and severities across Philadelphia's street segments. 
         </p>
         <p>
-          In our version, we expand the original methodology to focus on <strong>risk-exposure rates</strong> rather than simple counts, integrating state and local traffic volumes (AADT) to normalize crash occurrence, and layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice.
+          In our version, we expand the original methodology to focus on <strong>risk-exposure rates</strong> rather than simple counts, using measured PennDOT AADT where available and class-based exposure estimates elsewhere, while layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice.
         </p>
         
         <div class="code-cell">
@@ -596,10 +596,10 @@ def calculate_grade(segment, dem_raster):
           Analyzing simple crash counts penalizes long, heavily traveled segments. We normalized crash rates to compute a true <strong>Risk Index</strong> representing crash frequencies per million Daily Vehicle-Feet traveled:
         </p>
         <div class="formula-block">
-          <div class="formula">Risk Index = (Crashes × 1,000,000) / (AADT × Segment Length)</div>
+          <div class="formula">Risk Index = (Crashes × 1,000,000) / (Exposure Volume × Segment Length)</div>
         </div>
         <p>
-          AADT values are joined from DVRPC and PennDOT. For local roads lacking telemetry, we apply class-based volume fallbacks:
+          Measured AADT is used only where a reliable PennDOT state-road value is available. DVRPC traffic-count volumes remain raw context because the service includes short-duration, bicycle, pedestrian, and class-count records. For streets without measured AADT, we apply class-based exposure estimates:
         </p>
         <div class="table-container">
           <table>
@@ -607,7 +607,7 @@ def calculate_grade(segment, dem_raster):
               <tr>
                 <th>Road Class</th>
                 <th>Classification</th>
-                <th>Assumed Daily Volume (AADT)</th>
+                <th>Estimated Daily Exposure</th>
               </tr>
             </thead>
             <tbody>
