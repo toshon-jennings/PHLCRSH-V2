@@ -14,6 +14,34 @@ export type SegmentProperties = {
   st_type: string | null;
   road_class: string | null;
   state_divisor_type: string | null;
+
+  // Phase 1: Exposure & Severity Baselining
+  adt: number | null;
+  vmt: number | null;
+  risk_index: number | null;
+  has_fatality: number | null;
+  has_severe_injury: number | null;
+  length: number | null;
+
+  // Phase 2: Micro-Infrastructure & Right-of-Way
+  bike_infra_type: string | null;
+  intersection_control: string | null;
+
+  // Phase 3: Temporal & Environmental Dynamics
+  nighttime_illumination: number | null;
+  crash_count_day: number | null;
+  crash_count_night: number | null;
+  crash_count_clear: number | null;
+  crash_count_wet: number | null;
+  crash_count_day_clear: number | null;
+  crash_count_day_wet: number | null;
+  crash_count_night_clear: number | null;
+  crash_count_night_wet: number | null;
+  is_glare_prone: number | null;
+
+  // Phase 4: Equity & Climate Vulnerability Overlays
+  is_school_zone: number | null;
+  high_heat_vulnerability: number | null;
 };
 
 export type SegmentFeature = {
@@ -78,6 +106,26 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
     st_type,
     class                               AS road_class,
     state_divisor_type,
+    CAST(adt AS FLOAT)                  AS adt,
+    CAST(vmt AS FLOAT)                  AS vmt,
+    CAST(risk_index AS FLOAT)           AS risk_index,
+    CAST(length AS FLOAT)               AS length,
+    CAST(has_fatality AS INTEGER)       AS has_fatality,
+    CAST(has_severe_injury AS INTEGER)  AS has_severe_injury,
+    bike_infra_type,
+    intersection_control,
+    CAST(nighttime_illumination AS FLOAT) AS nighttime_illumination,
+    CAST(crash_count_day AS INTEGER)    AS crash_count_day,
+    CAST(crash_count_night AS INTEGER)  AS crash_count_night,
+    CAST(crash_count_clear AS INTEGER)  AS crash_count_clear,
+    CAST(crash_count_wet AS INTEGER)    AS crash_count_wet,
+    CAST(crash_count_day_clear AS INTEGER) AS crash_count_day_clear,
+    CAST(crash_count_day_wet AS INTEGER)   AS crash_count_day_wet,
+    CAST(crash_count_night_clear AS INTEGER) AS crash_count_night_clear,
+    CAST(crash_count_night_wet AS INTEGER) AS crash_count_night_wet,
+    CAST(is_glare_prone AS INTEGER)     AS is_glare_prone,
+    CAST(is_school_zone AS INTEGER)     AS is_school_zone,
+    CAST(high_heat_vulnerability AS INTEGER) AS high_heat_vulnerability,
     ST_AsGeoJSON(geometry)              AS geojson
   FROM segments
 `);
@@ -98,6 +146,26 @@ export async function loadSegmentFeatures(): Promise<SegmentFeature[]> {
       st_type: r.st_type,
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
+      adt: r.adt,
+      vmt: r.vmt,
+      risk_index: r.risk_index,
+      length: r.length,
+      has_fatality: r.has_fatality,
+      has_severe_injury: r.has_severe_injury,
+      bike_infra_type: r.bike_infra_type,
+      intersection_control: r.intersection_control,
+      nighttime_illumination: r.nighttime_illumination,
+      crash_count_day: r.crash_count_day,
+      crash_count_night: r.crash_count_night,
+      crash_count_clear: r.crash_count_clear,
+      crash_count_wet: r.crash_count_wet,
+      crash_count_day_clear: r.crash_count_day_clear,
+      crash_count_day_wet: r.crash_count_day_wet,
+      crash_count_night_clear: r.crash_count_night_clear,
+      crash_count_night_wet: r.crash_count_night_wet,
+      is_glare_prone: r.is_glare_prone,
+      is_school_zone: r.is_school_zone,
+      high_heat_vulnerability: r.high_heat_vulnerability,
     },
     geometry: JSON.parse(r.geojson),
   }));
@@ -190,6 +258,26 @@ function rowToStoryFocalExample(r: any): StoryFocalExample {
       st_type: r.st_type,
       road_class: r.road_class,
       state_divisor_type: r.state_divisor_type,
+      adt: r.adt,
+      vmt: r.vmt,
+      risk_index: r.risk_index,
+      length: r.length,
+      has_fatality: r.has_fatality,
+      has_severe_injury: r.has_severe_injury,
+      bike_infra_type: r.bike_infra_type,
+      intersection_control: r.intersection_control,
+      nighttime_illumination: r.nighttime_illumination,
+      crash_count_day: r.crash_count_day,
+      crash_count_night: r.crash_count_night,
+      crash_count_clear: r.crash_count_clear,
+      crash_count_wet: r.crash_count_wet,
+      crash_count_day_clear: r.crash_count_day_clear,
+      crash_count_day_wet: r.crash_count_day_wet,
+      crash_count_night_clear: r.crash_count_night_clear,
+      crash_count_night_wet: r.crash_count_night_wet,
+      is_glare_prone: r.is_glare_prone,
+      is_school_zone: r.is_school_zone,
+      high_heat_vulnerability: r.high_heat_vulnerability,
     },
     geometry: JSON.parse(r.geojson),
   };
@@ -213,6 +301,26 @@ export async function loadStoryFocalExamples(storyId: string): Promise<StoryFoca
     st_type,
     class                               AS road_class,
     state_divisor_type,
+    CAST(adt AS FLOAT)                  AS adt,
+    CAST(vmt AS FLOAT)                  AS vmt,
+    CAST(risk_index AS FLOAT)           AS risk_index,
+    CAST(length AS FLOAT)               AS length,
+    CAST(has_fatality AS INTEGER)       AS has_fatality,
+    CAST(has_severe_injury AS INTEGER)  AS has_severe_injury,
+    bike_infra_type,
+    intersection_control,
+    CAST(nighttime_illumination AS FLOAT) AS nighttime_illumination,
+    CAST(crash_count_day AS INTEGER)    AS crash_count_day,
+    CAST(crash_count_night AS INTEGER)  AS crash_count_night,
+    CAST(crash_count_clear AS INTEGER)  AS crash_count_clear,
+    CAST(crash_count_wet AS INTEGER)    AS crash_count_wet,
+    CAST(crash_count_day_clear AS INTEGER) AS crash_count_day_clear,
+    CAST(crash_count_day_wet AS INTEGER)   AS crash_count_day_wet,
+    CAST(crash_count_night_clear AS INTEGER) AS crash_count_night_clear,
+    CAST(crash_count_night_wet AS INTEGER) AS crash_count_night_wet,
+    CAST(is_glare_prone AS INTEGER)     AS is_glare_prone,
+    CAST(is_school_zone AS INTEGER)     AS is_school_zone,
+    CAST(high_heat_vulnerability AS INTEGER) AS high_heat_vulnerability,
     ST_AsGeoJSON(geometry)              AS geojson
   `;
 
@@ -323,4 +431,50 @@ SELECT ${selectColumns} FROM ranked`,
 export async function countGradeOutliers(threshold: number): Promise<number> {
   const result = await query(`SELECT COUNT(*) AS n FROM segments WHERE grade_range_smooth > ${threshold}`);
   return Number((result.toArray()[0] as any).n);
+}
+
+export type LeaderboardEntry = {
+  seg_id: number;
+  st_name: string | null;
+  st_type: string | null;
+  road_class: string | null;
+  crash_count: number;
+  risk_index: number;
+  adt: number;
+};
+
+export async function loadVisibleLeaderboard(
+  west: number,
+  south: number,
+  east: number,
+  north: number,
+  colName: string = 'crash_count'
+): Promise<LeaderboardEntry[]> {
+  const result = await query(`
+    SELECT
+      CAST(seg_id AS INTEGER)             AS seg_id,
+      st_name,
+      st_type,
+      class                               AS road_class,
+      CAST(${colName} AS INTEGER)         AS crash_count,
+      CASE WHEN adt > 0 AND length > 0
+           THEN (CAST(${colName} AS FLOAT) * 1000000.0) / (CAST(adt AS FLOAT) * CAST(length AS FLOAT))
+           ELSE 0.0 END                   AS risk_index,
+      CAST(adt AS FLOAT)                  AS adt
+    FROM segments
+    WHERE ST_Intersects(geometry, ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}))
+      AND ${colName} > 0
+    ORDER BY risk_index DESC
+    LIMIT 10
+  `);
+
+  return result.toArray().map((r: any) => ({
+    seg_id: r.seg_id,
+    st_name: r.st_name,
+    st_type: r.st_type,
+    road_class: r.road_class,
+    crash_count: r.crash_count,
+    risk_index: r.risk_index,
+    adt: r.adt,
+  }));
 }

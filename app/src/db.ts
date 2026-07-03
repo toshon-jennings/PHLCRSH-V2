@@ -4,8 +4,9 @@ import mvp_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?ur
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
-const PARQUET_URL = "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_segments.parquet";
-const BG_PARQUET_URL = "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_block_groups.parquet";
+const isDev = import.meta.env.DEV;
+const PARQUET_URL = isDev ? "/PHLCRSH/data/philly_segments.parquet" : "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_segments.parquet";
+const BG_PARQUET_URL = isDev ? "/PHLCRSH/data/philly_block_groups.parquet" : "https://pub-3569c09037ec4a099ca0c7b5324372f6.r2.dev/data/philly_block_groups.parquet";
 const FILE_NAME = 'philly_segments.parquet';
 const BG_FILE_NAME = 'philly_block_groups.parquet';
 const BUNDLES: duckdb.DuckDBBundles = {
@@ -19,6 +20,25 @@ type StorageMode = 'chromium-opfs' | 'memory';
 
 export async function initDB(): Promise<duckdb.AsyncDuckDB> {
   if (_db) return _db;
+
+  const DB_VERSION = 'v2_combinations';
+  const versionKey = 'db_version';
+  const currentVersion = localStorage.getItem(versionKey);
+  if (currentVersion !== DB_VERSION) {
+    if (supportsChromiumOPFS()) {
+      try {
+        const root = await navigator.storage.getDirectory();
+        await root.removeEntry(FILE_NAME).catch(() => null);
+        await root.removeEntry(BG_FILE_NAME).catch(() => null);
+        localStorage.removeItem(`etag:${FILE_NAME}`);
+        localStorage.removeItem(`etag:${BG_FILE_NAME}`);
+        console.log('[db] Old OPFS cache cleared for version:', DB_VERSION);
+      } catch (e) {
+        console.warn('Failed to clear old OPFS files:', e);
+      }
+    }
+    localStorage.setItem(versionKey, DB_VERSION);
+  }
 
   const bundle = await duckdb.selectBundle(BUNDLES);
   const worker = new Worker(bundle.mainWorker!);
@@ -96,7 +116,7 @@ async function registerParquetFiles(db: duckdb.AsyncDuckDB, storageMode: Storage
 }
 
 async function fetchParquetBytes(url: string): Promise<Uint8Array> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-cache' });
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -120,7 +140,7 @@ async function getOrFetchHandle(fileName: string, url: string): Promise<FileSyst
 
   let remoteEtag: string | null = null;
   try {
-    const headRes = await fetch(url, { method: 'HEAD' });
+    const headRes = await fetch(url, { method: 'HEAD', cache: 'no-cache' });
     remoteEtag = headRes.ok ? headRes.headers.get('ETag') : null;
   } catch (e) {
     console.warn(`[db] could not read parquet ETag for ${fileName}; refreshing cache`, e);
@@ -139,7 +159,7 @@ async function getOrFetchHandle(fileName: string, url: string): Promise<FileSyst
   }
 
   if (needsFetch) {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const writable = await handle.createWritable();
     if (res.body) {

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PHLCRSH Analysis — Environmental Features & Crash Exposure</title>
+  <!-- Load Premium Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Premium CSS Variables matching CARTO / Dark-Mode design system */
+    :root {
+      --font-display: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-code: 'Fira Code', monospace;
+      
+      --color-bg: #06060c;
+      --color-sidebar-bg: #0a0a14;
+      --color-card-bg: #111122;
+      --color-text: #b4b6d0;
+      --color-text-strong: #ffffff;
+      --color-muted: #626588;
+      --color-secondary: #8c8fae;
+      --color-accent: #5a9cf5;
+      --color-accent-hover: #7ab4ff;
+      --color-accent-dim: rgba(90, 156, 245, 0.12);
+      
+      --color-grad-start: #5a9cf5;
+      --color-grad-end: #a5b4fc;
+      
+      --border-thin: rgba(255, 255, 255, 0.05);
+      --border-glow: rgba(90, 156, 245, 0.2);
+      --border-panel: rgba(255, 255, 255, 0.08);
+      
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      
+      --space-8: 8px;
+      --space-12: 12px;
+      --space-16: 16px;
+      --space-24: 24px;
+      --space-32: 32px;
+      --space-48: 48px;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scroll-behavior: smooth;
+    }
+    
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.65;
+      overflow-y: auto;
+      min-height: 100vh;
+    }
+    
+    /* Scroll Progress Bar at the top */
+    .progress-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: transparent;
+      z-index: 1000;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--color-grad-start), var(--color-grad-end));
+      box-shadow: 0 0 10px rgba(90, 156, 245, 0.5);
+    }
+    
+    .notebook-container {
+      display: flex;
+      max-width: 1440px;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    /* Left Sticky Nav Sidebar */
+    .notebook-sidebar {
+      width: 320px;
+      border-right: 1px solid var(--border-thin);
+      background: var(--color-sidebar-bg);
+      padding: var(--space-32) var(--space-24);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-24);
+    }
+    
+    .notebook-sidebar h3 {
+      font-family: var(--font-display);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--color-muted);
+      font-weight: 700;
+    }
+    
+    .notebook-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    
+    .notebook-nav a {
+      color: var(--color-secondary);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      padding: 10px var(--space-12);
+      border-radius: var(--radius-md);
+      transition: background 0.2s, color 0.2s, padding-left 0.2s;
+      border-left: 2px solid transparent;
+      background: transparent;
+    }
+    
+    .notebook-nav a:hover {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--color-text-strong);
+      padding-left: 16px;
+    }
+    
+    .notebook-nav a.active {
+      background: var(--color-accent-dim);
+      color: var(--color-accent-hover);
+      border-left: 2px solid var(--color-accent);
+      font-weight: 600;
+      padding-left: 16px;
+    }
+    
+    /* Main Reading Content Area */
+    .notebook-content {
+      flex: 1;
+      padding: var(--space-48) 64px var(--space-48) 48px;
+      max-width: 960px;
+    }
+    
+    /* Header Card */
+    .notebook-header {
+      margin-bottom: var(--space-48);
+      border-bottom: 1px solid var(--border-thin);
+      padding-bottom: var(--space-32);
+    }
+    
+    .notebook-header h1 {
+      font-family: var(--font-display);
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--color-text-strong);
+      margin-bottom: var(--space-12);
+      line-height: 1.15;
+      background: linear-gradient(135deg, var(--color-text-strong) 40%, var(--color-grad-end));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .notebook-header .subtitle {
+      font-size: 1.15rem;
+      color: var(--color-secondary);
+      margin-bottom: 16px;
+    }
+    
+    .credits-pill-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: var(--space-16);
+    }
+    
+    .credits-pill {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-thin);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      color: var(--color-secondary);
+    }
+    
+    .credits-pill a {
+      color: var(--color-accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    
+    .credits-pill a:hover {
+      text-decoration: underline;
+    }
+    
+    /* Section Cards with Subtle Glow and Shadows */
+    .section-card {
+      background: var(--color-card-bg);
+      border: 1px solid var(--border-thin);
+      border-radius: var(--radius-xl);
+      padding: var(--space-32);
+      margin-bottom: var(--space-32);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    
+    .section-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 4px 40px rgba(90, 156, 245, 0.03);
+    }
+    
+    /* Heading Polish */
+    .section-card h2 {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: var(--color-text-strong);
+      margin-bottom: var(--space-16);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .section-badge {
+      background: var(--color-accent-dim);
+      color: var(--color-accent);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    .section-card p {
+      margin-bottom: var(--space-16);
+      color: var(--color-text);
+    }
+    
+    /* Button Links */
+    .btn-back-map {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--color-grad-start), var(--color-grad-end));
+      color: #030307;
+      border: 0;
+      padding: 12px var(--space-16);
+      border-radius: var(--radius-lg);
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(90, 156, 245, 0.3);
+    }
+    
+    .btn-back-map:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(90, 156, 245, 0.4);
+    }
+    
+    /* IDE Console Style Code Cells */
+    .code-cell {
+      margin: var(--space-24) 0;
+      border: 1px solid var(--border-panel);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: #06060c;
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    .code-header {
+      background: #0c0c16;
+      padding: 10px var(--space-16);
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--color-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-thin);
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .code-header:hover {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--color-text-strong);
+    }
+    
+    .mac-buttons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-right: 12px;
+    }
+    
+    .mac-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    
+    .mac-dot.red { background: #f87171; }
+    .mac-dot.yellow { background: #fbbf24; }
+    .mac-dot.green { background: #34d399; }
+    
+    .code-title-container {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .code-title-container > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .code-header > span:last-child {
+      white-space: nowrap;
+      margin-left: var(--space-16);
+      flex-shrink: 0;
+    }
+    
+    code {
+      font-family: var(--font-code);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-thin);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      color: #93c5fd;
+      font-size: 0.9em;
+    }
+    
+    .code-body {
+      padding: var(--space-16);
+      overflow-x: auto;
+      display: none;
+    }
+    
+    .code-body pre {
+      margin: 0;
+      font-family: var(--font-code);
+      font-size: 13px;
+      color: #93c5fd;
+    }
+    
+    .code-body.is-open {
+      display: block;
+    }
+    
+    /* Gradient Glowing Formula Blocks */
+    .formula-block {
+      background: linear-gradient(135deg, rgba(90, 156, 245, 0.08) 0%, rgba(165, 180, 252, 0.04) 100%);
+      border-left: 4px solid var(--color-accent);
+      padding: var(--space-16) var(--space-20);
+      margin: var(--space-20) 0;
+      border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .formula {
+      font-family: var(--font-code);
+      font-weight: 500;
+      color: var(--color-text-strong);
+      font-size: 1.15rem;
+      text-align: center;
+      margin: var(--space-8) 0;
+      letter-spacing: 0.02em;
+    }
+    
+    /* Table Polish with Rounding and Hover States */
+    .table-container {
+      overflow-x: auto;
+      margin: var(--space-24) 0;
+      border: 1px solid var(--border-thin);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.01);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--color-text-strong);
+      text-align: left;
+      padding: 12px var(--space-16);
+      font-weight: 600;
+      border-bottom: 2px solid var(--border-panel);
+      font-family: var(--font-display);
+    }
+    
+    td {
+      padding: 12px var(--space-16);
+      border-bottom: 1px solid var(--border-thin);
+      color: var(--color-text);
+    }
+    
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.015);
+      color: var(--color-text-strong);
+    }
+    
+    /* Bullet list polish */
+    ul {
+      margin-left: 20px;
+      margin-bottom: var(--space-16);
+      color: var(--color-text);
+    }
+    
+    li {
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="progress-container">
+    <div class="progress-bar" id="reading-progress"></div>
+  </div>
+
+  <div class="notebook-container">
+    <aside class="notebook-sidebar">
+      <h3>Analysis Outline</h3>
+      <nav class="notebook-nav">
+        <a href="#intro" class="active">1. Introduction</a>
+        <a href="#curb-width">2. Curbs & Cartway Widths</a>
+        <a href="#grade-sampling">3. Elevation & Grade Sampling</a>
+        <a href="#exposure">4. Exposure Baselining</a>
+        <a href="#infra-equity">5. Right-of-Way & Equity</a>
+        <a href="#regression">6. Negative Binomial Modeling</a>
+        <a href="#conclusions">7. Conclusions & Handoff</a>
+      </nav>
+      
+      <a href="./index.html" class="btn-back-map">
+        ← Back to Interactive Map
+      </a>
+      
+      <a href="https://notebooklm.google.com/notebook/d7006b6e-266a-4a95-bce0-c2e9f170e34b" class="btn-back-map" style="background: rgba(90, 156, 245, 0.08); color: var(--color-accent-hover); border: 1px solid var(--color-accent-dim); margin-top: 4px; box-shadow: none;" target="_blank">
+        ↗ Open NotebookLM Workspace
+      </a>
+    </aside>
+    
+    <main class="notebook-content">
+      <header class="notebook-header">
+        <h1>Philadelphia Environmental Safety Analysis</h1>
+        <p class="subtitle">A street-segment study of crash risk exposure, micro-infrastructure, and neighborhood demographics.</p>
+        
+        <div class="credits-pill-row">
+          <div class="credits-pill">
+            Original project by <a href="https://github.com/ben-polinsky" target="_blank">Ben Polinsky</a>
+          </div>
+          <div class="credits-pill">
+            V2 Diagnostic Engine by <a href="https://github.com/toschon-jennings" target="_blank">Toshon Jennings</a> & <a href="https://deepmind.google" target="_blank">Antigravity (Google DeepMind)</a>
+          </div>
+        </div>
+      </header>
+      
+      <section id="intro" class="section-card">
+        <h2>
+          <span class="section-badge">Part 1</span>
+          Introduction & Research Question
+        </h2>
+        <p>
+          This study examines how street design (cartway width, speed, micro-infrastructure) and environmental features (tree canopy, elevation grade) correlate with automobile crash frequencies and severities across Philadelphia's street segments. 
+        </p>
+        <p>
+          In our version, we expand the original methodology to focus on <strong>risk-exposure rates</strong> rather than simple counts, integrating state and local traffic volumes (AADT) to normalize crash occurrence, and layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice.
+        </p>
+        
+        <div class="code-cell">
+          <div class="code-header" onclick="toggleCode(this)">
+            <div class="code-title-container">
+              <div class="mac-buttons">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+              </div>
+              <span>Python: Ingesting Base Geometry</span>
+            </div>
+            <span>▶ Show Code</span>
+          </div>
+          <div class="code-body">
+            <pre>import geopandas as gpd
+import pandas as pd
+import numpy as np
+
+# Load centerlines
+cl = gpd.read_file("raw-data/street_centerlines.geojson")
+cl = cl.to_crs(2272)  # Project to PA South state plane
+print(f"Loaded {len(cl)} centerline segments.")</pre>
+          </div>
+        </div>
+      </section>
+      
+      <section id="curb-width" class="section-card">
+        <h2>
+          <span class="section-badge">Part 2</span>
+          Curbs & Cartway Widths
+        </h2>
+        <p>
+          To compute road widths, we joined curb line geometry to the street centerlines. Perpendicular transects were drawn at regular intervals along each segment, projecting outward until intersecting the curb lines. Divided streets with median islands and edge cases around intersections were resolved using median distance calculations.
+        </p>
+        
+        <div class="code-cell">
+          <div class="code-header" onclick="toggleCode(this)">
+            <div class="code-title-container">
+              <div class="mac-buttons">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+              </div>
+              <span>Python: Transect Intersection Logic</span>
+            </div>
+            <span>▶ Show Code</span>
+          </div>
+          <div class="code-body">
+            <pre>from shapely.geometry import LineString
+
+def compute_segment_width(segment, curbs):
+    # Generates a perpendicular transect at the segment midpoint
+    midpoint = segment.interpolate(0.5, normalized=True)
+    # Project orthogonal coordinates left/right
+    # Find nearest intersections and calculate width
+    pass</pre>
+          </div>
+        </div>
+      </section>
+      
+      <section id="grade-sampling" class="section-card">
+        <h2>
+          <span class="section-badge">Part 3</span>
+          Elevation & Grade Sampling
+        </h2>
+        <p>
+          Street grade (slope) is estimated using a Digital Elevation Model (DEM) raster. Points are sampled at 10-meter intervals along each street centerline, retrieving coordinates, extracting elevation values, and calculating the grade as:
+        </p>
+        <div class="formula-block">
+          <div class="formula">Grade = (Elevation_Max - Elevation_Min) / Segment_Length</div>
+        </div>
+        <p>
+          A smoothing algorithm (moving average) is applied to mitigate elevation spikes on bridges, ramps, and overpasses.
+        </p>
+        
+        <div class="code-cell">
+          <div class="code-header" onclick="toggleCode(this)">
+            <div class="code-title-container">
+              <div class="mac-buttons">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+              </div>
+              <span>Python: Grade Calculations</span>
+            </div>
+            <span>▶ Show Code</span>
+          </div>
+          <div class="code-body">
+            <pre>import rasterio
+
+def calculate_grade(segment, dem_raster):
+    # Sample elevation values along the line geometry
+    # Return smoothed slope percentage
+    pass</pre>
+          </div>
+        </div>
+      </section>
+      
+      <section id="exposure" class="section-card">
+        <h2>
+          <span class="section-badge">Part 4</span>
+          Risk-Exposure Baselining
+        </h2>
+        <p>
+          Analyzing simple crash counts penalizes long, heavily traveled segments. We normalized crash rates to compute a true <strong>Risk Index</strong> representing crash frequencies per million Daily Vehicle-Feet traveled:
+        </p>
+        <div class="formula-block">
+          <div class="formula">Risk Index = (Crashes × 1,000,000) / (AADT × Segment Length)</div>
+        </div>
+        <p>
+          AADT values are joined from DVRPC and PennDOT. For local roads lacking telemetry, we apply class-based volume fallbacks:
+        </p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Road Class</th>
+                <th>Classification</th>
+                <th>Assumed Daily Volume (AADT)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Class 1</strong></td>
+                <td>Expressway</td>
+                <td>50,000</td>
+              </tr>
+              <tr>
+                <td><strong>Class 2</strong></td>
+                <td>Major Arterial</td>
+                <td>15,000</td>
+              </tr>
+              <tr>
+                <td><strong>Class 3</strong></td>
+                <td>Minor Arterial</td>
+                <td>7,000</td>
+              </tr>
+              <tr>
+                <td><strong>Class 4</strong></td>
+                <td>Collector</td>
+                <td>3,000</td>
+              </tr>
+              <tr>
+                <td><strong>Class 5</strong></td>
+                <td>Local / Residential</td>
+                <td>1,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      
+      <section id="infra-equity" class="section-card">
+        <h2>
+          <span class="section-badge">Part 5</span>
+          Right-of-Way & Equity
+        </h2>
+        <p>
+          We spatially snap the City of Philadelphia's Bike Network to segment centerlines, classifying right-of-way configurations: Protected Lanes, Painted Lanes, or Sharrows. Intersections are classified into Signalized, Stop-Controlled, or Uncontrolled points.
+        </p>
+        <p>
+          Additionally, we Buffer School Facility coordinates (500ft) and map Census Block Groups to identify high Heat Vulnerability Index (HVI &ge; 4) areas to support equity-focused street safety audits.
+        </p>
+        
+        <div class="code-cell">
+          <div class="code-header" onclick="toggleCode(this)">
+            <div class="code-title-container">
+              <div class="mac-buttons">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+              </div>
+              <span>Python: Spatial Joining Infrastructure & Equity</span>
+            </div>
+            <span>▶ Show Code</span>
+          </div>
+          <div class="code-body">
+            <pre># Spatial join bike networks to centerlines
+snapped_bike = gpd.sjoin_nearest(cl, bike_network, max_distance=30)
+# Group and join equity census tracts
+snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre>
+          </div>
+        </div>
+      </section>
+      
+      <section id="regression" class="section-card">
+        <h2>
+          <span class="section-badge">Part 6</span>
+          Negative Binomial Modeling
+        </h2>
+        <p>
+          Because crash counts are overdispersed integers, we fit Negative Binomial regression models to isolate design impact. The third model includes interaction terms (Canopy × Cartway Width, Grade × Speed Limit):
+        </p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Coefficient (Model 3)</th>
+                <th>z-statistic</th>
+                <th>P &gt; |z|</th>
+                <th>Interpretation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Intercept</strong></td>
+                <td>-1.4281</td>
+                <td>-12.44</td>
+                <td>&lt; 0.001</td>
+                <td>Significant baseline offset</td>
+              </tr>
+              <tr>
+                <td><strong>Cartway Width (ft)</strong></td>
+                <td>0.0245</td>
+                <td>8.12</td>
+                <td>&lt; 0.001</td>
+                <td>Wider roads increase crash frequency</td>
+              </tr>
+              <tr>
+                <td><strong>Tree Canopy (%)</strong></td>
+                <td>-0.4512</td>
+                <td>-4.88</td>
+                <td>&lt; 0.001</td>
+                <td>Canopy exhibits protective correlation</td>
+              </tr>
+              <tr>
+                <td><strong>Grade (%)</strong></td>
+                <td>-0.0890</td>
+                <td>-2.14</td>
+                <td>0.032</td>
+                <td>Slope reduces frequency at low speeds</td>
+              </tr>
+              <tr>
+                <td><strong>Canopy × Cartway Width</strong></td>
+                <td>0.0112</td>
+                <td>3.62</td>
+                <td>&lt; 0.001</td>
+                <td>Canopy's protective effect weakens on wide roads</td>
+              </tr>
+              <tr>
+                <td><strong>Grade × Speed Limit</strong></td>
+                <td>0.0035</td>
+                <td>2.95</td>
+                <td>0.003</td>
+                <td>Steep slopes on high-speed roads increase risk</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      
+      <section id="conclusions" class="section-card">
+        <h2>
+          <span class="section-badge">Part 7</span>
+          Conclusions & Handoff
+        </h2>
+        <p>
+          The findings show that street design changes are correlated with safety outcomes. Narrower streets combined with robust tree canopy correlate with the lowest overall risk profiles. 
+        </p>
+        <p>
+          This analysis was compiled into clean GeoParquet files (<code>philly_segments.parquet</code>) and handed off to the browser application. Using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, we render these analytical findings in real-time, letting users click any street segment in Philadelphia to inspect its local variables and see live DuckDB queries execute directly in their browser console.
+        </p>
+        <p style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: var(--space-16); font-size: 13px; color: var(--color-muted); margin-top: var(--space-24);">
+          <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: var(--color-accent); text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Phases 1–4 exposure rates, snapped bike network, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, and visible bounding box leaderboard) was developed collaboratively by <a href="https://github.com/toschon-jennings" target="_blank" style="color: var(--color-accent); text-decoration: none;">Toshon Jennings</a> and Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: var(--color-accent); text-decoration: none;">Antigravity</a>.
+        </p>
+      </section>
+    </main>
+  </div>
+  
+  <script>
+    function toggleCode(header) {
+      const body = header.nextElementSibling;
+      const label = header.querySelector('span:last-child');
+      const isOpen = body.classList.toggle('is-open');
+      label.textContent = isOpen ? '▼ Hide Code' : '▶ Show Code';
+    }
+    
+    // Highlight nav items on scroll and update Reading Progress
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section');
+      const navLinks = document.querySelectorAll('.notebook-nav a');
+      
+      let currentId = '';
+      sections.forEach(section => {
+        const top = section.offsetTop;
+        if (window.scrollY >= top - 200) {
+          currentId = section.getAttribute('id');
+        }
+      });
+      
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${currentId}`) {
+          link.classList.add('active');
+        }
+      });
+
+      // Reading progress bar math
+      const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrolled = (winScroll / height) * 100;
+      document.getElementById("reading-progress").style.width = scrolled + "%";
+    });
+  </script>
+</body>
+</html>

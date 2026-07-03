@@ -39,11 +39,11 @@ export const BLOCK_GROUP_LAYER_GROUP: LayerGroup = [
 export const LEGENDS: Record<string, Legend> = {
   'segments-line': { kind: 'steps', stops: [
     { color: '#ffffff', label: '0' },
-    { color: '#fee5d9', label: '1' },
-    { color: '#fcae91', label: '5' },
-    { color: '#fb6a4a', label: '25' },
-    { color: '#de2d26', label: '50' },
-    { color: '#a50f15', label: '100+' },
+    { color: '#fee5d9', label: '0.1' },
+    { color: '#fcae91', label: '0.5' },
+    { color: '#fb6a4a', label: '2.0' },
+    { color: '#de2d26', label: '10.0' },
+    { color: '#a50f15', label: '50.0+' },
   ]},
   'canopy-pct': { kind: 'steps', stops: [
     { color: '#ffffff', label: '0%' },
@@ -93,6 +93,20 @@ export const LEGENDS: Record<string, Legend> = {
     yHi: 'steep',
     cells: ['#f2c66d', '#b91c1c', '#d7d9dc', '#f29a76'],
   },
+  'bike-lanes': { kind: 'steps', stops: [
+    { color: '#059669', label: 'Protected' },
+    { color: '#3b82f6', label: 'Painted' },
+    { color: '#f59e0b', label: 'Sharrow' },
+  ]},
+  'signals': { kind: 'steps', stops: [
+    { color: '#ef4444', label: 'Traffic Signal' },
+  ]},
+  'heat': { kind: 'steps', stops: [
+    { color: '#f97316', label: 'High Heat' },
+  ]},
+  'school-zones': { kind: 'steps', stops: [
+    { color: '#8b5cf6', label: 'School Zone' },
+  ]},
 };
 
 export function addMapSourcesAndLayers(
@@ -178,13 +192,13 @@ export function addMapSourcesAndLayers(
     source: 'segments',
     paint: {
       'line-color': [
-        'step', ['coalesce', ['get', 'crash_count'], 0],
+        'step', ['coalesce', ['get', 'risk_index'], 0],
         '#ffffff',
-        1, '#fee5d9',
-        5, '#fcae91',
-        25, '#fb6a4a',
-        50, '#de2d26',
-        100, '#a50f15',
+        0.1, '#fee5d9',
+        0.5, '#fcae91',
+        2.0, '#fb6a4a',
+        10.0, '#de2d26',
+        50.0, '#a50f15',
       ],
       'line-width': [
         'step', ['coalesce', ['get', 'cartway_width_ft'], 0],
@@ -361,10 +375,108 @@ export function addMapSourcesAndLayers(
   });
 
   map.addLayer({
+    id: 'segments-ai-highlight',
+    type: 'line',
+    source: 'segments',
+    filter: ['==', ['get', 'seg_id'], -1],
+    paint: {
+      'line-color': '#00ffff',
+      'line-width': 6,
+      'line-opacity': 0.95,
+    },
+  });
+
+  map.addLayer({
     id: 'segments-hit',
     type: 'line',
     source: 'segments',
     paint: { 'line-color': 'transparent', 'line-width': 10, 'line-opacity': 0 },
+  });
+
+  // Phase 2: Bike Lanes
+  map.addLayer({
+    id: 'bike-lanes',
+    type: 'line',
+    source: 'segments',
+    filter: ['!=', ['get', 'bike_infra_type'], 'None'],
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': [
+        'match', ['get', 'bike_infra_type'],
+        'Protected', '#059669',
+        'Painted', '#3b82f6',
+        'Sharrow', '#f59e0b',
+        '#d5d8d2'
+      ],
+      'line-width': 2.5,
+    }
+  });
+
+  // Phase 2: Signal Locations (using canvas signal-dot)
+  const sigCanvas = document.createElement('canvas');
+  sigCanvas.width = 12;
+  sigCanvas.height = 12;
+  const sigCtx = sigCanvas.getContext('2d')!;
+  sigCtx.beginPath();
+  sigCtx.arc(6, 6, 4.5, 0, Math.PI * 2);
+  sigCtx.fillStyle = '#ef4444';
+  sigCtx.fill();
+  sigCtx.strokeStyle = '#fff';
+  sigCtx.lineWidth = 1.5;
+  sigCtx.stroke();
+  map.addImage('signal-dot', {
+    width: 12,
+    height: 12,
+    data: new Uint8Array(sigCtx.getImageData(0, 0, 12, 12).data.buffer),
+  });
+
+  map.addLayer({
+    id: 'signals',
+    type: 'symbol',
+    source: 'segments',
+    filter: ['==', ['get', 'intersection_control'], 'Signalized'],
+    layout: {
+      visibility: 'none',
+      'symbol-placement': 'line-center',
+      'icon-image': 'signal-dot',
+      'icon-size': 1,
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+    },
+  });
+
+  // Phase 4: Urban Heat Index
+  map.addLayer({
+    id: 'heat',
+    type: 'line',
+    source: 'segments',
+    filter: ['==', ['get', 'high_heat_vulnerability'], 1],
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#f97316',
+      'line-width': [
+        'step', ['coalesce', ['get', 'cartway_width_ft'], 0],
+        2.5, 5, 3.5, 10, 4.5, 50, 6, 100, 8,
+      ],
+      'line-opacity': 0.85,
+    }
+  });
+
+  // Phase 4: School Zones
+  map.addLayer({
+    id: 'school-zones',
+    type: 'line',
+    source: 'segments',
+    filter: ['==', ['get', 'is_school_zone'], 1],
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#8b5cf6',
+      'line-width': [
+        'step', ['coalesce', ['get', 'cartway_width_ft'], 0],
+        2.5, 5, 3.5, 10, 4.5, 50, 6, 100, 8,
+      ],
+      'line-opacity': 0.85,
+    }
   });
 }
 

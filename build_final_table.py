@@ -60,6 +60,9 @@ from data_prep.census import build_block_groups_with_acs, join_bg_to_segments
 from data_prep.canopy import compute_canopy_pct
 from data_prep.elevation import compute_grade
 from data_prep.trees import load_trees, count_trees_per_segment
+from data_prep.bike_network import load_bike_network, join_bike_network_to_segments
+from data_prep.streetlights import load_streetlights, aggregate_streetlights_to_segments
+from data_prep.equity import load_schools, load_heat_vulnerability, flag_school_zones, flag_heat_vulnerability
 
 
 OUTPUT_PATH = stash("philly_final_analytical_table.gpkg")
@@ -81,7 +84,10 @@ def build() -> gpd.GeoDataFrame:
     cl = _left_merge(cl, crash_agg)
     for c in ["crash_count", "fatal_count", "injury_count",
               "susp_serious_inj_count", "ped_count", "bicycle_count",
-              "severity_score"]:
+              "severity_score", "crash_count_day", "crash_count_night",
+              "crash_count_clear", "crash_count_wet",
+              "crash_count_day_clear", "crash_count_day_wet",
+              "crash_count_night_clear", "crash_count_night_wet"]:
         cl[c] = cl[c].fillna(0).astype(int)
 
     print("Cartway widths...")
@@ -144,6 +150,97 @@ def build() -> gpd.GeoDataFrame:
 
     # Final lane count: prefer state road, then OSM.
     cl["lanes_final"] = cl["state_lane_cnt"].fillna(cl["osm_lanes"])
+
+    # Phase 1: Exposure & Severity Baselining
+    print("Computing Exposure & Severity metrics...")
+    class_fallbacks = {
+        "motorway": 50000.0,
+        "trunk": 30000.0,
+        "primary": 15000.0,
+        "secondary": 8000.0,
+        "tertiary": 4000.0,
+        "residential": 500.0,
+        "unclassified": 500.0,
+        "service": 100.0
+    }
+    mapped_fallback = cl["class"].map(class_fallbacks).fillna(500.0)
+    cl["adt"] = cl["state_aadt"].fillna(cl["dvrpc_aadt"]).fillna(mapped_fallback)
+    cl["length"] = cl.geometry.length / 5280.0
+    cl["vmt"] = cl["adt"] * cl["length"]
+    cl["risk_index"] = np.where(
+        cl["vmt"] > 0,
+        (cl["crash_count"] * 1000000.0) / (cl["adt"] * cl["length"]),
+        0.0
+    )
+    cl["has_fatality"] = np.where(cl["fatal_count"] > 0, 1, 0)
+    cl["has_severe_injury"] = np.where(cl["susp_serious_inj_count"] > 0, 1, 0)
+
+    # Phase 2: Micro-Infrastructure & Right-of-Way
+    print("Joining Bike Network...")
+    try:
+        bike_net = load_bike_network()
+        bike_joined = join_bike_network_to_segments(bike_net, cl)
+        cl = _left_merge(cl, bike_joined)
+    except Exception as e:
+        print(f"Warning: Failed to load bike network ({e}), using fallback.")
+        cl["bike_infra_type"] = "None"
+
+    # Intersection Control categorisation
+    cl["intersection_control"] = np.select(
+        [cl["has_signal"] == 1, (cl["has_all_way_stop"] == 1) | (cl["has_conventional_stop"] == 1)],
+        ["Signalized", "Stop-Controlled"],
+        default="Uncontrolled"
+    )
+
+    # Phase 3: Temporal & Environmental Dynamics
+    print("Joining Streetlights...")
+    try:
+        lights = load_streetlights()
+        lights_agg = aggregate_streetlights_to_segments(lights, cl)
+        cl = _left_merge(cl, lights_agg)
+        cl["nighttime_illumination"] = cl["nighttime_illumination"].fillna(0).astype(int)
+    except Exception as e:
+        print(f"Warning: Failed to load streetlights ({e}), using fallback.")
+        cl["nighttime_illumination"] = 0
+
+    # Calculate sun-glare prone segments (azimuth/bearing E-W within 75-105 or 255-285 deg)
+    try:
+        coords = cl.geometry.apply(lambda geom: geom.coords)
+        first_pt = coords.apply(lambda c: c[0])
+        last_pt = coords.apply(lambda c: c[-1])
+        dx = last_pt.apply(lambda p: p[0]) - first_pt.apply(lambda p: p[0])
+        dy = last_pt.apply(lambda p: p[1]) - first_pt.apply(lambda p: p[1])
+        angle = np.degrees(np.arctan2(dy, dx)) % 360.0
+        bearing = (90.0 - angle) % 360.0
+        cl["is_glare_prone"] = np.where(
+            ((bearing >= 75.0) & (bearing <= 105.0)) |
+            ((bearing >= 255.0) & (bearing <= 285.0)),
+            1, 0
+        )
+    except Exception as e:
+        print(f"Warning: Failed to calculate bearings ({e}), using fallback.")
+        cl["is_glare_prone"] = 0
+
+    # Phase 4: Equity & Climate Vulnerability Overlays
+    print("Joining Schools...")
+    try:
+        schools = load_schools()
+        schools_flagged = flag_school_zones(schools, cl)
+        cl = _left_merge(cl, schools_flagged)
+        cl["is_school_zone"] = cl["is_school_zone"].fillna(0).astype(int)
+    except Exception as e:
+        print(f"Warning: Failed to load schools ({e}), using fallback.")
+        cl["is_school_zone"] = 0
+
+    print("Joining Heat Vulnerability...")
+    try:
+        heat = load_heat_vulnerability()
+        heat_flagged = flag_heat_vulnerability(heat, cl)
+        cl = _left_merge(cl, heat_flagged)
+        cl["high_heat_vulnerability"] = cl["high_heat_vulnerability"].fillna(0).astype(int)
+    except Exception as e:
+        print(f"Warning: Failed to load heat vulnerability ({e}), using fallback.")
+        cl["high_heat_vulnerability"] = 0
 
     return cl
 

@@ -53,6 +53,29 @@ keep_cols = [
     "state_total_width_ft",
     "state_divisor_type",
     "state_road_distance",
+    # Phase 1
+    "adt",
+    "vmt",
+    "risk_index",
+    "has_fatality",
+    "has_severe_injury",
+    # Phase 2
+    "bike_infra_type",
+    "intersection_control",
+    # Phase 3
+    "nighttime_illumination",
+    "crash_count_day",
+    "crash_count_night",
+    "crash_count_clear",
+    "crash_count_wet",
+    "crash_count_day_clear",
+    "crash_count_day_wet",
+    "crash_count_night_clear",
+    "crash_count_night_wet",
+    "is_glare_prone",
+    # Phase 4
+    "is_school_zone",
+    "high_heat_vulnerability",
     "geometry",
 ]
 

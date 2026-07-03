@@ -53,3 +53,28 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python -m ipykernel install --user --name phlcrsh --display-name "PHLCRSH"
 ```
+
+---
+
+## Interactive AI Grounded Chat Safety Assistant
+
+PHLCRSH-V2 includes a client-side **Grounded AI Safety Assistant** (accessible via the floating chat bubble in the bottom right corner). It operates as a local Text-to-SQL grounded safety assistant:
+
+1. **Text-to-SQL Translation (Pass 1):** Takes your natural language query (e.g., *"Find the top 5 highest risk streets with no bike lanes in South Philly"*) and performs a client-side fetch to the selected LLM provider. The system prompt is grounded with the database schemas for both `segments` and `block_groups` (from `data_dictionary.md`) to guide the LLM to write a valid DuckDB SQL query.
+2. **Local browser-side execution:** The generated SQL query is executed directly in the browser against the local DuckDB-WASM databases.
+3. **Interactive Map Highlights:** If the SQL query returns a set of street segment IDs (`seg_id`), the assistant:
+    * Updates a dedicated neon cyan MapLibre line highlight layer (`segments-ai-highlight`).
+    * Triggers a visual flash animation (opacity pulse) to draw attention to the segments.
+    * Dynamically calculates bounds and zooms the map to fit the returned features.
+4. **Insight Synthesis (Pass 2):** The query results are converted to a clean JSON array (safely converting any `BigInt` types to prevent serialization errors) and fed back to the LLM in a second-pass call, which summarizes the findings into a human-readable safety insight.
+
+### Supported Providers & Setup
+
+Click the **Gear** icon in the chat header to open the settings pane:
+*   **LLM Providers:** Select from Gemini, OpenAI, Anthropic, Groq, Grok, or OpenRouter.
+*   **Model Selection:** Model names are auto-populated with sensible defaults (e.g., `gemini-2.5-flash`, `gpt-4o-mini`) but can be customized to use any model supported by your selected provider.
+*   **API Key Management:** Input your API key, which is saved securely in the browser's `localStorage` and sent directly to the vendor's API endpoint (no third-party servers).
+
+> [!NOTE]
+> For the best client-side experience, **Gemini** or **OpenRouter** are recommended because they natively support browser fetch requests. Direct calls to Anthropic's endpoints from a web browser will result in CORS restrictions.
+
