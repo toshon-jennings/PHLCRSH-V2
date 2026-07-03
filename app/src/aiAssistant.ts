@@ -397,13 +397,7 @@ export function initAIAssistant() {
   chatBubble.className = 'ai-chat-bubble';
   chatBubble.setAttribute('aria-label', 'Open safety assistant');
   chatBubble.setAttribute('aria-haspopup', 'true');
-  chatBubble.innerHTML = `
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      <circle cx="9" cy="10" r="1" fill="currentColor"></circle>
-      <circle cx="15" cy="10" r="1" fill="currentColor"></circle>
-    </svg>
-  `;
+  chatBubble.innerHTML = `<img src="/favicon.png" width="26" height="26" alt="Safety Assistant" draggable="false">`;
 
   const chatPanel = document.createElement('div');
   chatPanel.id = 'ai-chat-panel';
