@@ -373,6 +373,10 @@ body.about-open {
   display: none;
 }
 
+#sidebar.mode-pinned:not(.has-active-chip) .sidebar-pinned .sidebar-back-idle {
+  display: block;
+}
+
 .pinned-street {
   margin-bottom: var(--space-14);
 }
