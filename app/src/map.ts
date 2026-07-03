@@ -544,6 +544,15 @@ export async function initMap(container: string) {
     setTimeout(updateLeaderboard, 50);
   });
 
+  document.getElementById('sidebar-back-leaderboard')!.addEventListener('click', () => {
+    if (pinnedSegId !== null) {
+      map.setFeatureState({ source: 'segments', id: pinnedSegId }, { pinned: false });
+      pinnedSegId = null;
+    }
+    setSidebarMode('idle');
+    setTimeout(updateLeaderboard, 50);
+  });
+
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') unpin();
   });
