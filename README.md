@@ -74,7 +74,7 @@ PHLCRSH-V2 includes a client-side **Grounded AI Safety Assistant** (accessible v
 Click the **Gear** icon in the chat header to open the settings pane:
 *   **LLM Providers:** Select from Gemini, OpenAI, Anthropic, Groq, Grok, or OpenRouter.
 *   **Model Selection:** Model names are auto-populated with sensible defaults (e.g., `gemini-2.5-flash`, `gpt-4o-mini`) but can be customized to use any model supported by your selected provider.
-*   **API Key Management:** Input your API key, which is saved securely in the browser's `localStorage` and sent directly to the vendor's API endpoint (no third-party servers).
+*   **API Key Management:** Click the Gear icon in the chat header to input your API key (Gemini, OpenAI, Anthropic, Groq, Grok, or OpenRouter). API keys are encrypted and stored locally (unlocked using PIN) in the browser's localStorage and sent directly to the vendor's API endpoint.
 
 > [!NOTE]
 > For the best client-side experience, **Gemini** or **OpenRouter** are recommended because they natively support browser fetch requests. Direct calls to Anthropic's endpoints from a web browser will result in CORS restrictions.
