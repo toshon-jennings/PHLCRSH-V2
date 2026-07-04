@@ -622,10 +622,13 @@
           Conclusions & Handoff
         </h2>
         <p>
-          <strong>Original findings (Ben Polinsky):</strong> The regression results show that street design changes are correlated with safety outcomes. Narrower streets combined with robust tree canopy correlate with the lowest overall risk profiles. These findings were compiled into the GeoParquet data files used by the browser application.
+          <strong>Original findings (Ben Polinsky):</strong> The regression results show that street design changes are correlated with safety outcomes. Narrower streets combined with robust tree canopy correlate with the lowest overall risk profiles.
         </p>
         <p>
-          <strong>V2 deployment (Toshon Jennings):</strong> This analysis was handed off to a client-side browser application using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, rendering the analytical findings in real-time. Users can click any street segment in Philadelphia to inspect its local variables, filter by crash severity or environmental conditions, and use the Grounded AI Safety Assistant to ask natural-language questions about the data.
+          <strong>Browser application (Ben Polinsky):</strong> This analysis was compiled into GeoParquet files and handed off to a client-side browser application built by Ben using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, rendering the analytical findings in real-time. Users can click any street segment in Philadelphia to inspect its local variables, filter by crash severity or environmental conditions, and interact with the data directly in the browser.
+        </p>
+        <p>
+          <strong>V2 addition (Toshon Jennings):</strong> The Grounded AI Safety Assistant, overlay toggles for bike network, intersection controls, streetlight density, sun-glare prediction, day/night and weather condition filters, HVI and school zone equity overlays, and the visible viewport crash-density leaderboard were added on top of Ben's application as part of the V2 diagnostic engine expansion.
         </p>
         <p style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: var(--space-16); font-size: 13px; color: var(--color-muted); margin-top: var(--space-24);">
           <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: #cccccc; text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Parts 4, 5 — crash density rates, snapped bike network and intersection controls, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, visible bounding box leaderboard, and Grounded AI Safety Assistant) was developed by <a href="https://github.com/toshon-jennings" target="_blank" style="color: #cccccc; text-decoration: none;">Toshon Jennings</a> in collaboration with Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: #cccccc; text-decoration: none;">Antigravity</a>.
