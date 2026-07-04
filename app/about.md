@@ -28,7 +28,7 @@ In July 2026, the application was upgraded from a static count viewer into a dyn
 ## Credits & Contributions
 
 - **Original Application**: Created and developed by [Ben Polinsky](https://github.com/ben-polinsky) as an exploratory analysis tool linking spatial geometry and PennDOT crashes. View the original [PHLCRSH GitHub repository](https://github.com/benpolinsky/PHLCRSH).
-- **V2 Diagnostic Engine**: Extended collaboratively by [Toshon Jennings](https://github.com/toschon-jennings) and **Antigravity** (Google DeepMind's AI coding assistant). This upgrade built out the crash density & severity metrics, snapped infrastructure indexes, daylight/weather slices, solar-glare vectors, school/heat overlays, and the visible viewport crash-density leaderboard.
+- **V2 Diagnostic Engine**: Extended collaboratively by [Toshon Jennings](https://github.com/toshon-jennings) and **Antigravity** (Google DeepMind's AI coding assistant). This upgrade built out the crash density & severity metrics, snapped infrastructure indexes, daylight/weather slices, solar-glare vectors, school/heat overlays, and the visible viewport crash-density leaderboard.
 
 ## Data Sources
 
