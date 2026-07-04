@@ -473,7 +473,7 @@
             Original project by <a href="https://github.com/ben-polinsky" target="_blank">Ben Polinsky</a>
           </div>
           <div class="credits-pill">
-            V2 Diagnostic Engine by <a href="https://github.com/toschon-jennings" target="_blank">Toshon Jennings</a> & <a href="https://deepmind.google" target="_blank">Antigravity (Google DeepMind)</a>
+            V2 Diagnostic Engine by <a href="https://github.com/toshon-jennings" target="_blank">Toshon Jennings</a> & <a href="https://deepmind.google" target="_blank">Antigravity (Google DeepMind)</a>
           </div>
         </div>
       </header>
@@ -484,35 +484,11 @@
           Introduction & Research Question
         </h2>
         <p>
-          This study examines how street design (cartway width, speed, micro-infrastructure) and environmental features (tree canopy, elevation grade) correlate with automobile crash frequencies and severities across Philadelphia's street segments. 
+          <strong>Original analysis (Ben Polinsky):</strong> This study examines how street design (cartway width, speed, micro-infrastructure) and environmental features (tree canopy, elevation grade) correlate with automobile crash frequencies and severities across Philadelphia's street segments. The original analysis used raw crash counts and focused on the physical and environmental variables available through OpenDataPhilly.
         </p>
         <p>
-          In our version, we expand the original methodology to focus on <strong>length-normalized crash rates</strong> rather than simple counts, while layering demographic equity indicators (Heat Vulnerability Index, School Zones) to examine environmental justice. We deliberately do not estimate per-segment traffic volume: Philadelphia has no reliable AADT for most local streets (see Part 4), so a rate normalized by segment length is the honest metric available.
+          <strong>V2 expansion (Toshon Jennings):</strong> Added length-normalized crash density rates, layered demographic equity indicators (Heat Vulnerability Index, School Zones), snapped bike network and intersection control data to segments, and added temporal slices (day/night, weather) and environmental overlays (streetlight density, sun-glare prediction). The V2 engine also integrates a client-side Grounded AI Safety Assistant that translates natural language questions into DuckDB-SQL queries executed directly in the browser.
         </p>
-        
-        <div class="code-cell">
-          <div class="code-header" onclick="toggleCode(this)">
-            <div class="code-title-container">
-              <div class="mac-buttons">
-                <span class="mac-dot red"></span>
-                <span class="mac-dot yellow"></span>
-                <span class="mac-dot green"></span>
-              </div>
-              <span>Python: Ingesting Base Geometry</span>
-            </div>
-            <span>▶ Show Code</span>
-          </div>
-          <div class="code-body">
-            <pre>import geopandas as gpd
-import pandas as pd
-import numpy as np
-
-# Load centerlines
-cl = gpd.read_file("raw-data/street_centerlines.geojson")
-cl = cl.to_crs(2272)  # Project to PA South state plane
-print(f"Loaded {len(cl)} centerline segments.")</pre>
-          </div>
-        </div>
       </section>
       
       <section id="curb-width" class="section-card">
@@ -521,32 +497,8 @@ print(f"Loaded {len(cl)} centerline segments.")</pre>
           Curbs & Cartway Widths
         </h2>
         <p>
-          To compute road widths, we joined curb line geometry to the street centerlines. Perpendicular transects were drawn at regular intervals along each segment, projecting outward until intersecting the curb lines. Divided streets with median islands and edge cases around intersections were resolved using median distance calculations.
+          <strong>Original analysis (Ben Polinsky):</strong> To compute road widths, Ben joined curb line geometry to the street centerlines from OpenDataPhilly. Perpendicular transects were drawn at regular 75-foot stations along each segment, projecting outward until intersecting the curb lines. Divided streets with median islands and edge cases around intersections were resolved using median distance calculations. The cartway-width calculation is one of the core spatial operations in the pipeline, documented in the Jupyter notebook with multiple rejected routes and extensive validation.
         </p>
-        
-        <div class="code-cell">
-          <div class="code-header" onclick="toggleCode(this)">
-            <div class="code-title-container">
-              <div class="mac-buttons">
-                <span class="mac-dot red"></span>
-                <span class="mac-dot yellow"></span>
-                <span class="mac-dot green"></span>
-              </div>
-              <span>Python: Transect Intersection Logic</span>
-            </div>
-            <span>▶ Show Code</span>
-          </div>
-          <div class="code-body">
-            <pre>from shapely.geometry import LineString
-
-def compute_segment_width(segment, curbs):
-    # Generates a perpendicular transect at the segment midpoint
-    midpoint = segment.interpolate(0.5, normalized=True)
-    # Project orthogonal coordinates left/right
-    # Find nearest intersections and calculate width
-    pass</pre>
-          </div>
-        </div>
       </section>
       
       <section id="grade-sampling" class="section-card">
@@ -555,36 +507,14 @@ def compute_segment_width(segment, curbs):
           Elevation & Grade Sampling
         </h2>
         <p>
-          Street grade (slope) is estimated using a Digital Elevation Model (DEM) raster. Points are sampled at 10-meter intervals along each street centerline, retrieving coordinates, extracting elevation values, and calculating the grade as:
+          <strong>Original analysis (Ben Polinsky):</strong> Street grade (slope) is estimated using a Digital Elevation Model (DEM) raster from OpenDataPhilly. Points are sampled at 10-meter intervals along each street centerline and their elevation values extracted from the raster. Grade is calculated as:
         </p>
         <div class="formula-block">
           <div class="formula">Grade = (Elevation_Max - Elevation_Min) / Segment_Length</div>
         </div>
         <p>
-          A smoothing algorithm (moving average) is applied to mitigate elevation spikes on bridges, ramps, and overpasses.
+          A smoothing algorithm (moving average) is applied to mitigate elevation spikes on bridges, ramps, and overpasses. This grade variable is used in the regression models in Part 6 as a predictor for crash frequency.
         </p>
-        
-        <div class="code-cell">
-          <div class="code-header" onclick="toggleCode(this)">
-            <div class="code-title-container">
-              <div class="mac-buttons">
-                <span class="mac-dot red"></span>
-                <span class="mac-dot yellow"></span>
-                <span class="mac-dot green"></span>
-              </div>
-              <span>Python: Grade Calculations</span>
-            </div>
-            <span>▶ Show Code</span>
-          </div>
-          <div class="code-body">
-            <pre>import rasterio
-
-def calculate_grade(segment, dem_raster):
-    # Sample elevation values along the line geometry
-    # Return smoothed slope percentage
-    pass</pre>
-          </div>
-        </div>
       </section>
       
       <section id="exposure" class="section-card">
@@ -593,14 +523,14 @@ def calculate_grade(segment, dem_raster):
           Crash Density Baselining
         </h2>
         <p>
-          Analyzing simple crash counts penalizes long segments over short ones. We normalize by segment length to compute <strong>Crash Density</strong> — crashes per 1,000 ft of segment:
+          <strong>Original approach (Ben Polinsky):</strong> Ben's analysis used raw crash counts per segment as the dependent variable in the regression models, which is the standard approach when traffic volume data is unavailable.
+        </p>
+        <p>
+          <strong>V2 revision (Toshon Jennings):</strong> Initial V2 work attempted to normalize crash counts by traffic volume using PennDOT AADT where available and road-class-based estimates as a fallback — computing a Risk Index of crashes per million vehicle-miles. This approach was later removed because Philadelphia lacks reliable AADT for most local streets: PennDOT's <code>state_aadt</code> only covers state-owned roads, and DVRPC's traffic-count service mixes 15-minute, bicycle, pedestrian, and classification counts. The class-based lookups described the road's functional type, not the specific segment, so labeling the result "AADT est." was misleading. The metric was replaced with <strong>Crash Density</strong> — crashes per 1,000 ft of segment — which uses only measured quantities (crash counts and segment length from the centerline GIS) and makes no traffic-volume claim.
         </p>
         <div class="formula-block">
-          <div class="formula">Crash Density = (Crashes × 1,000) / Segment Length (ft)</div>
+          <div class="formula">Crash Density = (Crashes &times; 1,000) / Segment Length (ft)</div>
         </div>
-        <p>
-          A prior version of this metric tried to normalize by traffic volume (AADT) instead of length, computing a "Risk Index" of crashes per million vehicle-miles. That required a daily traffic count for every segment, which Philadelphia does not have: PennDOT's <code>state_aadt</code> only covers state-owned roads (a small minority of segments in this dataset), and DVRPC's traffic-count service mixes 15-minute, bicycle, pedestrian, and class-count records, so its <code>volume</code> field is not a reliable AADT. The missing values were filled with a road-class lookup table — e.g. every "Local" segment got the same assumed 1,000 vehicles/day regardless of the actual street — and displayed as an "AADT est." That number described the road's functional class, not the specific segment, so it has been removed rather than patched. Crash Density uses only measured quantities (crash counts, segment length) and makes no traffic-volume claim.
-        </p>
       </section>
       
       <section id="infra-equity" class="section-card">
@@ -609,31 +539,14 @@ def calculate_grade(segment, dem_raster):
           Right-of-Way & Equity
         </h2>
         <p>
-          We spatially snap the City of Philadelphia's Bike Network to segment centerlines, classifying right-of-way configurations: Protected Lanes, Painted Lanes, or Sharrows. Intersections are classified into Signalized, Stop-Controlled, or Uncontrolled points.
+          <strong>V2 addition (Toshon Jennings):</strong> These layers were added as part of the V2 diagnostic engine and were not in Ben's original analysis.
         </p>
         <p>
-          Additionally, we Buffer School Facility coordinates (500ft) and map Census Block Groups to identify high Heat Vulnerability Index (HVI &ge; 4) areas to support equity-focused street safety audits.
+          The City of Philadelphia's bike network is spatially snapped to segment centerlines (max 30ft distance), classifying right-of-way configurations: Protected Lanes, Painted Lanes, or Shared lanes (sharrows). Intersection control data is categorized into Signalized, Stop-Controlled, or Uncontrolled points and snapped to segment endpoints.
         </p>
-        
-        <div class="code-cell">
-          <div class="code-header" onclick="toggleCode(this)">
-            <div class="code-title-container">
-              <div class="mac-buttons">
-                <span class="mac-dot red"></span>
-                <span class="mac-dot yellow"></span>
-                <span class="mac-dot green"></span>
-              </div>
-              <span>Python: Spatial Joining Infrastructure & Equity</span>
-            </div>
-            <span>▶ Show Code</span>
-          </div>
-          <div class="code-body">
-            <pre># Spatial join bike networks to centerlines
-snapped_bike = gpd.sjoin_nearest(cl, bike_network, max_distance=30)
-# Group and join equity census tracts
-snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre>
-          </div>
-        </div>
+        <p>
+          Demographic equity overlays were added using Census Block Group data: school facility locations buffered at 500ft to flag school zones, and CDC-aligned Heat Vulnerability Index (HVI) tracts at HVI &ge; 4 threshold to identify high climate-risk corridors.
+        </p>
       </section>
       
       <section id="regression" class="section-card">
@@ -642,7 +555,7 @@ snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre
           Negative Binomial Modeling
         </h2>
         <p>
-          Because crash counts are overdispersed integers, we fit Negative Binomial regression models to isolate design impact. The third model includes interaction terms (Canopy × Cartway Width, Grade × Speed Limit):
+          <strong>Original analysis (Ben Polinsky):</strong> Because crash counts are overdispersed integers, Ben fit Negative Binomial regression models to isolate the impact of design and environmental variables. The third model includes interaction terms (Canopy &times; Cartway Width, Grade &times; Speed Limit):
         </p>
         <div class="table-container">
           <table>
@@ -685,14 +598,14 @@ snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre
                 <td>Slope reduces frequency at low speeds</td>
               </tr>
               <tr>
-                <td><strong>Canopy × Cartway Width</strong></td>
+                <td><strong>Canopy &times; Cartway Width</strong></td>
                 <td>0.0112</td>
                 <td>3.62</td>
                 <td>&lt; 0.001</td>
                 <td>Canopy's protective effect weakens on wide roads</td>
               </tr>
               <tr>
-                <td><strong>Grade × Speed Limit</strong></td>
+                <td><strong>Grade &times; Speed Limit</strong></td>
                 <td>0.0035</td>
                 <td>2.95</td>
                 <td>0.003</td>
@@ -709,13 +622,13 @@ snapped_hvi = gpd.sjoin(cl, hvi_tracts, how="left", predicate="intersects")</pre
           Conclusions & Handoff
         </h2>
         <p>
-          The findings show that street design changes are correlated with safety outcomes. Narrower streets combined with robust tree canopy correlate with the lowest overall risk profiles. 
+          <strong>Original findings (Ben Polinsky):</strong> The regression results show that street design changes are correlated with safety outcomes. Narrower streets combined with robust tree canopy correlate with the lowest overall risk profiles. These findings were compiled into the GeoParquet data files used by the browser application.
         </p>
         <p>
-          This analysis was compiled into clean GeoParquet files (<code>philly_segments.parquet</code>) and handed off to the browser application. Using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, we render these analytical findings in real-time, letting users click any street segment in Philadelphia to inspect its local variables and see live DuckDB queries execute directly in their browser console.
+          <strong>V2 deployment (Toshon Jennings):</strong> This analysis was handed off to a client-side browser application using <strong>DuckDB-WASM</strong> and <strong>MapLibre GL</strong>, rendering the analytical findings in real-time. Users can click any street segment in Philadelphia to inspect its local variables, filter by crash severity or environmental conditions, and use the Grounded AI Safety Assistant to ask natural-language questions about the data.
         </p>
         <p style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: var(--space-16); font-size: 13px; color: var(--color-muted); margin-top: var(--space-24);">
-          <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: #cccccc; text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Phases 1–4 crash density rates, snapped bike network, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, and visible bounding box leaderboard) was developed collaboratively by <a href="https://github.com/toschon-jennings" target="_blank" style="color: #cccccc; text-decoration: none;">Toshon Jennings</a> and Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: #cccccc; text-decoration: none;">Antigravity</a>.
+          <strong>Application Version Credits</strong>: Original application and notebook analysis built by <a href="https://github.com/ben-polinsky" target="_blank" style="color: #cccccc; text-decoration: none;">Ben Polinsky</a>. The V2 spatial diagnostic engine expansion (Parts 4, 5 — crash density rates, snapped bike network and intersection controls, streetlight pole counts, day/night weather conditions, HVI/school tract overlays, visible bounding box leaderboard, and Grounded AI Safety Assistant) was developed by <a href="https://github.com/toshon-jennings" target="_blank" style="color: #cccccc; text-decoration: none;">Toshon Jennings</a> in collaboration with Google DeepMind's <a href="https://deepmind.google" target="_blank" style="color: #cccccc; text-decoration: none;">Antigravity</a>.
         </p>
       </section>
     </main>
