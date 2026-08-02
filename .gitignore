@@ -9,3 +9,9 @@ venv/
 node_modules/
 .vscode/
 dist/
+
+
+# Personal agent working docs — local to the maintainer, not part of the package
+HANDOFF.md
+SUMMARY.md
+HITL.md
