@@ -1,6 +1,6 @@
 # PHLCRSH-V2
 
-PHLCRSH is an exploratory map of Philadelphia street segments, crash history, tree canopy, street width, grade, and block group context. The project asks where street geometry and environmental context line up with crash risk, and where the public data itself needs skepticism.
+PHLCRSH is an exploratory map of Philadelphia street segments, crash history, tree canopy, street width, grade, and block group context. The project asks where street geometry and environmental context line up with crash risk, and where the public data itself needs skepticism. This project is an expansion of a [Ben Polinsky](https://github.com/benpolinsky) project.
 
 The map is not a causal model. It is a browser-based analytical viewer for comparing patterns across street segments. DuckDB-WASM runs locally in the browser, reads GeoParquet outputs, and powers the map layers, peer comparisons, and story examples.
 
