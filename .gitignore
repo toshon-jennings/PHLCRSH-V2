@@ -15,6 +15,12 @@ dist/
 HANDOFF.md
 SUMMARY.md
 HITL.md
-
-# Personal agent working docs — local to the maintainer, not part of the package
 DECISIONS.md
+
+# Agent session state. .claude/launch.json is tracked on purpose; what follows
+# is the machinery behind the learned preferences — a verbatim log of prompts
+# typed during a session, its read cursor, and file snapshots taken to diff
+# against. This repo is public, and none of it is project content.
+.claude/taste-signals.jsonl
+.claude/taste-signals.cursor
+.claude/taste-watch/
