@@ -73,6 +73,7 @@
   --legend-color-e5f5e0: #e5f5e0;
   --legend-color-f7f4f9: #f7f4f9;
   --legend-color-f7fbff: #f7fbff;
+  --legend-color-fb6a4a: #fb6a4a;
   --legend-color-fcae91: #fcae91;
   --legend-color-fc8d59: #fc8d59;
   --legend-color-fdd49e: #fdd49e;
@@ -1151,6 +1152,7 @@ input.outlier-slider {
 .legend-color-e5f5e0 { background: var(--legend-color-e5f5e0); }
 .legend-color-f7f4f9 { background: var(--legend-color-f7f4f9); }
 .legend-color-f7fbff { background: var(--legend-color-f7fbff); }
+.legend-color-fb6a4a { background: var(--legend-color-fb6a4a); }
 .legend-color-fcae91 { background: var(--legend-color-fcae91); }
 .legend-color-fc8d59 { background: var(--legend-color-fc8d59); }
 .legend-color-fdd49e { background: var(--legend-color-fdd49e); }
