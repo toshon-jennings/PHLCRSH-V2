@@ -827,7 +827,7 @@ export function initAIAssistant() {
       },
       finish: (msg: Message) => {
         const pinned = isNearBottom();
-        msgDiv.innerHTML = renderMessageBody(msg) + renderMessageExtras(msg);
+        msgDiv.innerHTML = DOMPurify.sanitize(renderMessageBody(msg) + renderMessageExtras(msg));
         attachMessageListeners(msgDiv);
         if (pinned) scrollToBottom();
       },
